@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+//Modified by Leading Edge Aerial Technologies, LLC. (Apr 2021)//
 /////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -29,14 +29,18 @@
 
 #define WPNAV_WP_ACCEL_Z_DEFAULT        100.0f      // default vertical acceleration between waypoints in cm/s/s
 
-#define WPNAV_LEASH_LENGTH_MIN          10.0f      // minimum leash lengths in cm
+//#define WPNAV_LEASH_LENGTH_MIN          10.0f      // minimum leash lengths in cm
+#define WPNAV_LEASH_LENGTH_MIN          100.0f  //use to be 10f?     // minimum leash lengths in cm
 
-#define WPNAV_WP_FAST_OVERSHOOT_MAX     200.0f      // 2m overshoot is allowed during fast waypoints to allow for smooth transitions to next waypoint
+#define WPNAV_WP_FAST_OVERSHOOT_MAX     20.0f      // overshoot is allowed during fast waypoints to allow for smooth transitions to next waypoint
 
-#define WPNAV_YAW_DIST_MIN_FAST         2         //20 minimum track length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
-#define WPNAV_YAW_DIST_MIN_REG          100     //allows us to change the difference when a hold is set vs fast waypoint
+//#define WPNAV_YAW_DIST_MIN_FAST         2          //20 minimum track length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
+//#define WPNAV_YAW_DIST_MIN_REG          100     //allows us to change the difference when a hold is set vs fast waypoint
 
-#define WPNAV_PV_FASTWP_DIST            500       //fudge factor, centimeter distance away from fast waypoint mode that smooths out the transitions during fast-wp flight.  Has the effect of starting turn sooner
+#define WPNAV_YAW_DIST_MIN_FAST         50         // minimum track for fast waypoints length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
+#define WPNAV_YAW_DIST_MIN_REG          200     //minimum track length for regular waypoint length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
+
+#define WPNAV_RADIUS_FS            225       //centimeter distance away from fast waypoint mode that smooths out the transitions during fast-wp flight.  Has the effect of starting turn sooner/later
                 
 #define WPNAV_YAW_LEASH_PCT_MIN         0.134f        // target point must be at least this distance from the vehicle (expressed as a percentage of the maximum distance it can be from the vehicle - i.e. the leash length)
 
@@ -350,4 +354,14 @@ protected:
     AP_Int8     _rangefinder_use;
     bool        _rangefinder_healthy;
     float       _rangefinder_alt_cm;
+
+
+    //precisionvision addons (many of these values were defined but did not have parameters, i.e. they were hardcoded previously) 
+    AP_Int32 _pv_fastwp_radius_cm;
+    AP_Int32 _yaw_dist_min_fast;
+    AP_Int32 _yaw_dist_min_reg;
+    AP_Int32  _yaw_leash_len_min;
+    AP_Float  _yaw_leash_pct_min;
+    AP_Float _wp_fast_overshoot_max;
+
 };

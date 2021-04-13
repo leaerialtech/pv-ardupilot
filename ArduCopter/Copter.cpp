@@ -1,7 +1,3 @@
-/////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
-/////////////////////////////////////////////////////////////////
-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -76,6 +72,11 @@
  *  Wiki: http://copter.ardupilot.org/
  *
  */
+
+
+   /////////////////////////////////////////////////////////////////
+   //Modified by Leading Edge Aerial Technologies, LLC  (Feb 2021)//
+   /////////////////////////////////////////////////////////////////
 
 #include "Copter.h"
 

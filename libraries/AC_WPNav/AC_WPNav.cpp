@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+//Modified by Leading Edge Aerial Technologies, LLC. (Apr 2021)//
 /////////////////////////////////////////////////////////////////
 
 #include <AP_HAL/AP_HAL.h>
@@ -22,8 +22,8 @@ const AP_Param::GroupInfo AC_WPNav::var_info[] = {
     AP_GROUPINFO("SPEED",       0, AC_WPNav, _wp_speed_cms, WPNAV_WP_SPEED),
 
     // @Param: RADIUS
-    // @DisplayName: Waypoint Radius
-    // @Description: Defines the distance from a waypoint, that when crossed indicates the wp has been hit.
+    // @DisplayName: Waypoint Radius (non-fastwaypoints)
+    // @Description: Defines the distance from a waypoint, that when crossed indicates the wp has been hit (non-fast waypoints in PrecisionVision).
     // @Units: cm
     // @Range: 5 1000
     // @Increment: 1
@@ -43,7 +43,7 @@ const AP_Param::GroupInfo AC_WPNav::var_info[] = {
     // @DisplayName: Waypoint Descent Speed Target
     // @Description: Defines the speed in cm/s which the aircraft will attempt to maintain while descending during a WP mission
     // @Units: cm/s
-    // @Range: 10 500
+    // @Range: 10 500f
     // @Increment: 10
     // @User: Standard
     AP_GROUPINFO("SPEED_DN",    3, AC_WPNav, _wp_speed_down_cms, WPNAV_WP_SPEED_DOWN),
@@ -72,6 +72,69 @@ const AP_Param::GroupInfo AC_WPNav::var_info[] = {
     // @Values: 0:Disable,1:Enable
     // @User: Advanced
     AP_GROUPINFO("RFND_USE",   10, AC_WPNav, _rangefinder_use, 1),
+
+
+/////////////////////
+//PrecisionVision: 
+////////////////////
+
+    // @Param: RADIUS_FAST
+    // @DisplayName: Waypoint Radius for fast-waypoints
+    // @Description: Defines the distance from a fast-waypoint, that when crossed, indicates the wp has been hit 
+    // @Units: cm
+    // @Range: 5 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("RADIUS_FS", 15, AC_WPNav, _pv_fastwp_radius_cm, WPNAV_RADIUS_FS),
+    
+    // @Param: YWMIN_DF
+    // @DisplayName: target yaw track length distance minimum for fast waypoints
+    // @Description:  minimum track distance for fast waypoints length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
+    // @Units: cm
+    // @Range: 5 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("YWMIN_DF", 16, AC_WPNav, _yaw_dist_min_fast, WPNAV_YAW_DIST_MIN_FAST),
+    
+     // @Param: YWMIN_DR
+    // @DisplayName: target yaw track length distance minimum for regular waypoints
+    // @Description:  minimum track distance for fast waypoints length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
+    // @Units: cm
+    // @Range: 5 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("YWMIN_DR", 17, AC_WPNav, _yaw_dist_min_reg, WPNAV_YAW_DIST_MIN_REG),
+
+    // @Param: YWLSH_PMN
+    // @DisplayName: minimum leash lengths in cm
+    // @Description: minimum leash lengths in cm
+    // @Units: cm
+    // @Range: 5 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("YWLSH_LMN", 18, AC_WPNav, _yaw_leash_len_min, WPNAV_LEASH_LENGTH_MIN),
+
+
+    // @Param: YWLSH_PMN
+    // @DisplayName: waypoint leash percentage minimum
+    // @Description: target point must be at least this distance from the vehicle (expressed as a percentage of the maximum distance it can be from the vehicle - i.e. the leash length)
+    // @Units: %
+    // @Range: 0 1
+    // @Increment: 0.01
+    // @User: Standard
+    AP_GROUPINFO("YWLSH_PMN", 19, AC_WPNav, _yaw_leash_pct_min, WPNAV_YAW_LEASH_PCT_MIN),
+
+
+
+    // @Param: WPOV_MAX
+    // @DisplayName: overshoot  allowed during fast waypoints
+    // @Description: overshoot allowed during fast waypoints to allow for smooth transitions to next waypoint
+    // @Units: cm
+    // @Range: 5 1000
+    // @Increment: 1
+    // @User: Standard
+    AP_GROUPINFO("WPOV_MAX", 20, AC_WPNav, _wp_fast_overshoot_max, WPNAV_WP_FAST_OVERSHOOT_MAX),
+
 
     AP_GROUPEND
 };
@@ -474,7 +537,7 @@ bool AC_WPNav::advance_wp_target_along_track(float dt)
     if (!_flags.fast_waypoint) {
         _track_desired = constrain_float(_track_desired, 0, _track_length);
     } else {
-        _track_desired = constrain_float(_track_desired, 0, _track_length + WPNAV_WP_FAST_OVERSHOOT_MAX);
+        _track_desired = constrain_float(_track_desired, 0, _track_length + _wp_fast_overshoot_max);
     }
 
     // recalculate the desired position
@@ -494,9 +557,11 @@ bool AC_WPNav::advance_wp_target_along_track(float dt)
 
              // regular waypoints also require the copter to be within the waypoint radius, or fast_waypoint dist. 
              Vector3f dist_to_dest = (curr_pos - Vector3f(0,0,terr_offset)) - _destination;
-              if( dist_to_dest.length() <= (_flags.fast_waypoint ?  WPNAV_PV_FASTWP_DIST : _wp_radius_cm )){ //pvchange
+              if( dist_to_dest.length() <= (_flags.fast_waypoint ?  _pv_fastwp_radius_cm : _wp_radius_cm )){ //pvchange
                   _flags.reached_destination = true;
                   if(_flags.fast_waypoint){
+                       printf("fastwp condition\n");
+
                      // _flags.waypoint_completed = true; 
                   }
                  // _flags.waypoint_completed = true; 
@@ -506,15 +571,28 @@ bool AC_WPNav::advance_wp_target_along_track(float dt)
     }
 
     // update the target yaw if origin and destination are at least 2m apart horizontally
-    if (_track_length_xy >= (_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG)) {
-        if (_pos_control.get_leash_xy() < (_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG)) {
+
+    int val = (_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg);
+
+    if (_track_length_xy >= (_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg)) {
+        
+        if (_pos_control.get_leash_xy() < (_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg)) {
             // if the leash is short (i.e. moving slowly) and destination is at least 2m horizontally, point along the segment from origin to destination
-            set_yaw_cd(get_bearing_cd(_origin, _destination));
+            float yawcd = get_bearing_cd(_origin, _destination);
+           
+            printf("leash short,point along segment (Update TrgYaw): %f %s %d\n", yawcd, (_flags.fast_waypoint ? "WPNAV_YAW_DIST_MIN_FAST" :  "WPNAV_YAW_DIST_MIN_REG"), val);
+            set_yaw_cd(yawcd);
+        
         } else {
             Vector3f horiz_leash_xy = final_target - curr_pos;
             horiz_leash_xy.z = 0;
-            if (horiz_leash_xy.length() > MIN((_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG), _pos_control.get_leash_xy()*WPNAV_YAW_LEASH_PCT_MIN)) {
-                set_yaw_cd(RadiansToCentiDegrees(atan2f(horiz_leash_xy.y,horiz_leash_xy.x)));
+            if (horiz_leash_xy.length() > MIN((_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg), _pos_control.get_leash_xy()*_yaw_leash_pct_min)) {
+            
+             float newyaw = RadiansToCentiDegrees(atan2f(horiz_leash_xy.y,horiz_leash_xy.x));
+         //    printf("notSlowOrUnderThreshold (Update TrgYaw): %f %s %d\n", newyaw, (_flags.fast_waypoint ? "WPNAV_YAW_DIST_MIN_FAST" :  "WPNAV_YAW_DIST_MIN_REG"), val);
+                set_yaw_cd(newyaw);
+
+                
             }
         }
     }
@@ -604,7 +682,7 @@ void AC_WPNav::calculate_wp_leash_length()
     if(is_zero(pos_delta_unit_z) && is_zero(pos_delta_unit_xy)){
         _track_accel = 0;
         _track_speed = 0;
-        _track_leash_length = WPNAV_LEASH_LENGTH_MIN;
+        _track_leash_length = _yaw_leash_len_min;
     }else if(is_zero(_pos_delta_unit.z)){
         _track_accel = _wp_accel_cmss/pos_delta_unit_xy;
         _track_speed = _pos_control.get_max_speed_xy() / pos_delta_unit_xy;
@@ -959,8 +1037,8 @@ bool AC_WPNav::advance_spline_target_along_track(float dt)
         _pos_control.set_pos_target(target_pos);
 
         // update the target yaw if origin and destination are at least 2m apart horizontally
-        if (_track_length_xy >= (_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG)) {
-            if (_pos_control.get_leash_xy() < (_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG)) {
+        if (_track_length_xy >= (_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg)) {
+            if (_pos_control.get_leash_xy() < (_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg)) {
                 // if the leash is very short (i.e. flying at low speed) use the target point's velocity along the track
                 if (!is_zero(target_vel.x) && !is_zero(target_vel.y)) {
                     set_yaw_cd(RadiansToCentiDegrees(atan2f(target_vel.y,target_vel.x)));
@@ -968,7 +1046,7 @@ bool AC_WPNav::advance_spline_target_along_track(float dt)
             } else {
                 // point vehicle along the leash (i.e. point vehicle towards target point on the segment from origin to destination)
                 float track_error_xy_length = safe_sqrt(sq(track_error.x)+sq(track_error.y));
-                if (track_error_xy_length > MIN((_flags.fast_waypoint ? WPNAV_YAW_DIST_MIN_FAST :  WPNAV_YAW_DIST_MIN_REG), _pos_control.get_leash_xy()*WPNAV_YAW_LEASH_PCT_MIN)) {
+                if (track_error_xy_length > MIN((_flags.fast_waypoint ? _yaw_dist_min_fast :  _yaw_dist_min_reg), _pos_control.get_leash_xy()*_yaw_leash_pct_min)) {
                     // To-Do: why is track_error sign reversed?
                     set_yaw_cd(RadiansToCentiDegrees(atan2f(-track_error.y,-track_error.x)));
                 }
