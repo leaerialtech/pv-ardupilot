@@ -1,3 +1,7 @@
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
 #include "AC_WPNav_OA.h"
 
 AC_WPNav_OA::AC_WPNav_OA(const AP_InertialNav& inav, const AP_AHRS_View& ahrs, AC_PosControl& pos_control, const AC_AttitudeControl& attitude_control) :

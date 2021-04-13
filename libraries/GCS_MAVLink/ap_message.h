@@ -1,3 +1,8 @@
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
+
 //  GCS Message ID's
 /// NOTE: to ensure we never block on sending MAVLink messages
 /// please keep each MSG_ to a single MAVLink message. If need be

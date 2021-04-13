@@ -13,6 +13,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_Common.h>
 #include <AP_Math/AP_Math.h>

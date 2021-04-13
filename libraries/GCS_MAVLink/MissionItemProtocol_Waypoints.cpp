@@ -16,6 +16,11 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
+
 #include "MissionItemProtocol_Waypoints.h"
 
 #include <AP_Logger/AP_Logger.h>

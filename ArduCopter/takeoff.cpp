@@ -51,7 +51,6 @@ void Mode::_TakeOff::start(float alt_cm)
     // indicate we are taking off
     copter.set_land_complete(false);
     // tell position controller to reset alt target and reset I terms
-   //qqq
     copter.set_throttle_takeoff();
 
     // calculate climb rate

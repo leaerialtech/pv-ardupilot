@@ -13,6 +13,11 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
+
 #include "AP_OAPathPlanner.h"
 #include <AP_Math/AP_Math.h>
 #include <AP_AHRS/AP_AHRS.h>

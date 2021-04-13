@@ -1,3 +1,7 @@
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+/////////////////////////////////////////////////////////////////
+
 /// @file    AP_Mission.cpp
 /// @brief   Handles the MAVLINK command mission stack.  Reads and writes mission to storage.
 
