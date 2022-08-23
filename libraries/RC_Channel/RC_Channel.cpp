@@ -16,6 +16,10 @@
 /*
  *       RC_Channel.cpp - class for one RC channel input
  */
+ 
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
+/////////////////////////////////////////////////////////////////
 
 #include <stdlib.h>
 #include <cmath>
@@ -588,7 +592,7 @@ void RC_Channel::do_aux_function_sprayer(const aux_switch_pos_t ch_flag)
         return;
     }
 
-    sprayer->run(ch_flag == HIGH);
+    sprayer->run(ch_flag == HIGH, true);
     // if we are disarmed the pilot must want to test the pump
     sprayer->test_pump((ch_flag == HIGH) && !hal.util->get_soft_armed());
 }

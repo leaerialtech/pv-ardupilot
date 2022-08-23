@@ -274,7 +274,7 @@ ATC_RAT_YAW_I          0.0689
 ATC_RAT_YAW_IMAX       0.3
 ATC_RAT_YAW_D          0.0
 ATC_RAT_YAW_FILT       4.5125
-ATC_SLEW_YAW        3250
+ATC_SLEW_YAW            3250
 ATC_THR_MIX_MAN        4
 ATC_THR_MIX_MAX        0.9
 

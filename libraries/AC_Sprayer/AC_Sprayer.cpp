@@ -129,8 +129,10 @@ AC_Sprayer *AC_Sprayer::get_singleton()
     return _singleton;
 }
 
-void AC_Sprayer::run(const bool true_false)
+void AC_Sprayer::run(const bool true_false, const bool ignore_HeadingCheck)
 {
+    _flags.ignore_heading_check = ignore_HeadingCheck ? 1 : 0;
+
     // return immediately if no change
     if(firstRun && _config > 0){
         firstRun = false; 
@@ -176,7 +178,7 @@ void AC_Sprayer::update()
 {
     // exit immediately if we are disabled or shouldn't be running
     if (!_config || !running()) {
-        run(false);
+        run(false,false);
         return;
     }
 
@@ -200,29 +202,38 @@ void AC_Sprayer::update()
     // get the current time
     const uint32_t now = AP_HAL::millis();
     if (copter.failsafe.last_heartbeat_ms  == 0) {
-        run(false);
+        run(false, false);
         return;
     }
     // Check if we have gotten a GCS heartbeat recently (GCS sysid must match SYSID_MYGCS parameter)
     if (now - copter.failsafe.last_heartbeat_ms  > 2000) {
         // Log event if we are recovering from previous gcs failsafe
-        run(false);
+        run(false,false);
         return;
     }
 
     bool should_be_spraying = _flags.spraying;
 
-    bool waitForHeadingChange = false;  //might also include "guided" modes in future? 
+    bool waitForHeadingChange = !_flags.ignore_heading_check;  //might also include "guided" modes in future? 
     float desiredHeading = 0.0;
     int32_t currentHeading = (AP::ahrs().yaw_sensor / 100);
  
-    if(copter.control_mode == Mode::Number::AUTO){
-        waitForHeadingChange = true;
-        if(!copter.wp_nav->is_fast_waypoint()){
-            waitForHeadingChange = false; //holds and stop and spray do not need
+    if(!_flags.ignore_heading_check){ 
+        //to maintain backward compability if ignore waypoints is not specifically defined, we do a test for "slow-waypoints"
+        //and if it is a slow waypoint (one with a delay > 0) we disable the heading checks (this was the original workaround implementaton for spotspray)
+        //in future versions the intention will be that heading checks are entirely determined by the mission design or user commands, not fastwaypoint
+        //(particularlly since next versions of ardupilot will support S-Curve and do not have the same fast/slow waypoint concept)
+        
+        if(copter.control_mode == Mode::Number::AUTO){
+            waitForHeadingChange = true;
+            if(!copter.wp_nav->is_fast_waypoint()){
+                waitForHeadingChange = false; //holds and stop and spray do not need
+            }
+            desiredHeading = copter.mode_auto.wp_bearing() / 100;
+     
         }
-        desiredHeading = copter.mode_auto.wp_bearing() / 100;
     }
+
     int32_t diff = abs(desiredHeading - currentHeading);
     if(diff > 360){ diff = diff - 360;}
   

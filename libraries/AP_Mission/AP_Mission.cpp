@@ -286,7 +286,7 @@ bool AP_Mission::verify_command(const Mission_Command& cmd)
 
 bool AP_Mission::start_command(const Mission_Command& cmd)
 {
-    gcs().send_text(MAV_SEVERITY_INFO, "Mission: %u %s", cmd.index, cmd.type());
+    //gcs().send_text(MAV_SEVERITY_INFO, "Mission: %u %s", cmd.index, cmd.type());
     switch (cmd.id) {
     case MAV_CMD_DO_GRIPPER:
         return start_command_do_gripper(cmd);
@@ -336,66 +336,6 @@ bool AP_Mission::add_cmd(Mission_Command& cmd)
 }
 
 
-bool AP_Mission::insert_cmds(uint16_t index,  Mission_Command cmd[], int numCmds)
-{
-    if(cmd == 0 || numCmds <= 0){return false;}
-    int i=0; 
-
-    // sanity check index
-    if (index >= (unsigned)_cmd_total) {
-     for(i=0; i < numCmds; i++){
-        add_cmd(cmd[i]);
-     }
-    }
- 
-    Mission_Command temp_cmd; 
-    //copy over our last n commands to make room for the ones we will be inserting
-
-
-    int baseIdx = _cmd_total - numCmds; 
-    i=0; 
-    for(int j=0; j < numCmds; j++)
-    {
-        if (!read_cmd_from_storage(baseIdx+j, temp_cmd)) {
-            return false;
-        }
-        if(!add_cmd(temp_cmd)){
-            return false; 
-        }
-    }
-    
-    //push out all cmds above the insert point 
-    //command total has now increased, so we -N so that we are looing at the second to last command 
-    //of the original set 
-    i=0;
-    for(i = _cmd_total-(2+numCmds); i >= index; i--){
-          if (!read_cmd_from_storage(i, temp_cmd)) {  return false;}
-          if(!replace_cmd(i+numCmds, temp_cmd)){return false;} 
-    }
-
-    //finally, replace the new command 
-    i=0;
-    for(i=0; i < numCmds; i++){
-        if(!replace_cmd(index+i, cmd[i])){return false;}
-    }
-
-/*
-    Mission_Command* checkCmds = new Mission_Command[_cmd_total];
-    for(int z=0; z < _cmd_total; z++){
-        read_cmd_from_storage(z, checkCmds[z]);
-    }
-
-    for(int q=0; q < _cmd_total; q++){
-        if(checkCmds[q].index != q){
-            int zz = 21;
-            zz++; 
-        }
-    }
-*/
-
-
-    return true; 
-}
 
 
 /// replace_cmd - replaces the command at position 'index' in the command list with the provided cmd
@@ -1502,7 +1442,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         break;
 
  case MAV_CMD_USER_1:
-        packet.param2 = cmd.content.user1.param1; //not sure if this line is a bug? 
+        packet.param1 = cmd.content.user1.param1; 
         packet.param2 = cmd.content.user1.param2; //cmd.p1;
         packet.param3 = cmd.content.user1.param3;
         packet.param4 = cmd.content.user1.param4;
@@ -1861,7 +1801,7 @@ void AP_Mission::increment_jump_times_run(Mission_Command& cmd)
     for (uint8_t i=0; i<AP_MISSION_MAX_NUM_DO_JUMP_COMMANDS; i++) {
         if (_jump_tracking[i].index == cmd.index) {
             _jump_tracking[i].num_times_run++;
-            gcs().send_text(MAV_SEVERITY_INFO, "Mission: %u Jump %i/%i", _jump_tracking[i].index, _jump_tracking[i].num_times_run, cmd.content.jump.num_times);
+            //gcs().send_text(MAV_SEVERITY_INFO, "Mission: %u Jump %i/%i", _jump_tracking[i].index, _jump_tracking[i].num_times_run, cmd.content.jump.num_times);
             return;
         }else if(_jump_tracking[i].index == AP_MISSION_CMD_INDEX_NONE) {
             // we've searched through all known jump commands and haven't found it so allocate new space in _jump_tracking array

@@ -21,7 +21,6 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_HAL/AP_HAL.h>
 #include "AR_WPNav.h"
-#include "AP_OAPathPlanner.h"
 
 extern const AP_HAL::HAL& hal;
 

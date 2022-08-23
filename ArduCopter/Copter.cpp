@@ -88,6 +88,11 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 #define SCHED_TASK(func, rate_hz, max_time_micros) SCHED_TASK_CLASS(Copter, &copter, func, rate_hz, max_time_micros)
 
+
+#include <PV_Resuming/PVResumePointCreator.h>
+using namespace PrecisionVision;
+
+
 /*
   scheduler table for fast CPUs - all regular tasks apart from the fast_loop()
   should be listed here, along with how often they should be called (in hz)
@@ -121,6 +126,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK_CLASS(AP_VisualOdom,       &copter.g2.visual_odom,        update,         400,  50),
 #endif
     SCHED_TASK(update_altitude,       10,    100),
+    SCHED_TASK(update_tank_sensor,   10,    100),
     SCHED_TASK(run_nav_updates,       50,    100),
     SCHED_TASK(update_throttle_hover,100,     90),
 #if MODE_SMARTRTL_ENABLED == ENABLED
@@ -225,6 +231,8 @@ void Copter::setup()
     StorageManager::set_layout_copter();
 
     init_ardupilot();
+
+  
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks), MASK_LOG_PM);
@@ -586,6 +594,219 @@ void Copter::read_AHRS(void)
 
 
 
+//PrecisionVision: TankSensor is currently wired to an aux pin on the carrier board
+//it sends high signal when the tank is below the level (warning) 
+void Copter::update_tank_sensor()
+{
+    static bool inBootDelay = true;
+    if(g.pvtank_pin <= 0){return;}
+
+    hal.gpio->pinMode(((uint8_t)g.pvtank_pin), HAL_GPIO_INPUT);
+    uint8_t pin_state = hal.gpio->read((uint8_t)g.pvtank_pin);   //high signal means tank is full, 0 signal means tank is low. 
+
+          //if we are transitioning to the low state, we alert the user, and if we happen to be in a guided/auto flight mode,
+          //we kick out into brake mode. 
+
+
+        ////right now, the tank sensor is always on, may need to set this up with a parameter so that we can
+        //change the configuration, particularly if we get a new board. 
+        //if(_tank_sensor_status == TankSensorState::SENSOR_UNAVAILABLE){
+        //    return; 
+        //}
+
+        //if we WERE full, and now we are not, send it into brake mode! 
+        if(_tank_sensor_status == TankSensorState::TANK_FULL  && pin_state == 0){
+            //BUT only do so if A.) we are flying, B.) in regular auto mode (not loiter, takeoff, landing, or rtl, etc.)
+            //and C.) at least 8 seconds has passed since bootup, just to make sure everything powers up right
+
+            if(inBootDelay && millis() > 20000){ 
+                inBootDelay = false; 
+            }
+            
+            if(!inBootDelay)
+            {   
+                if(copter.control_mode == Mode::Number::AUTO)
+                {      
+                    if(!flightmode->is_taking_off() && !flightmode->is_landing()){
+                        if(copter.control_mode != Mode::Number::BRAKE){
+                            InsertResumePoint();      
+                        }
+                    }
+                }
+            }
+        }
+    
+    
+    _tank_sensor_status = pin_state > 0 ? TankSensorState::TANK_FULL : TankSensorState::TANK_EMPTY; 
+}
+
+
+
+void Copter::InsertResumePoint(){
+hal.console->printf("Insert ResumePoint Called.... ");
+printf("insert ResumePoint Called.... ");
+      bool wasSpraying = copter.sprayer.spraying();
+
+                        set_mode(Mode::Number::BRAKE, ModeReason::FAILSAFE);
+
+                        int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
+                        int oMissionSize = copter.mode_auto.mission.num_commands();
+                        if(oMissionSize < copter.mode_auto.mission.num_commands_max()){
+                        
+                        //send a USER_3 command back to the GCS, **do not confuse with GCS sending USER_3 to us! 
+                        //when we send MAV_CMD_USER_3 to the GCS, we are informing that we have inserted
+                        //a resume point. Right now, we can only use existing messages in the mavlink dialect
+                        //otherwise we have to compile special commands in the mavlink router for PrecisionVision
+
+                        PVResumePointCreator resumeMaker(
+                            *AP_Mission::get_singleton(),
+                             AP::ahrs(),
+                            *AC_Sprayer::get_singleton()
+                        );
+                        
+                        ERRCODE result = resumeMaker.CreateResumePointAtCurrentUavLocationAndState();
+                        copter.sprayer.run(false,false); //important that this comes after the creation so it detects spray state, smells like a refactor would be good though!
+
+                        if((int)result  > 0)
+                        {
+
+                            hal.console->printf("Resumepoint created successful, sending cmd...");
+                                    printf("resumepoint created successful, sending cmd...");
+
+                            int newMissionSize = copter.mode_auto.mission.num_commands();
+                            //grab the wpt cmd from the mission
+                            
+                            AP_Mission::Mission_Command chkCmd; 
+                            copter.mode_auto.mission.read_cmd_from_storage(current_wp_idx, chkCmd);
+
+                            if(newMissionSize != oMissionSize)
+                            {
+                                mavlink_msg_command_long_send(
+                                MAVLINK_COMM_0, //assuming only one channel back to gcs 
+                                0,
+                                0,
+                                MAV_CMD_USER_3,
+                                0,
+                                //param1
+                                (float) current_wp_idx, //resume wpt index (this would be the next wpt.)
+                                //param2
+                                (float) newMissionSize, //new total number of wpts stored onboard 
+                                //param3
+                                chkCmd.content.location.lat, 
+                                //param4
+                                chkCmd.content.location.lng,
+                                //param5
+                                chkCmd.content.location.alt,
+                                //param6
+                                (int)chkCmd.content.location.get_alt_frame(),
+                                //param7
+                                    wasSpraying ? 1 : 0);
+
+                                }
+                            }
+                        }else{
+                            hal.console->printf("Resume point creation failed!");
+                              printf("resume point creation failed!");
+                        }
+}
+
+
+
+
+TankSensorState Copter::get_tank_sensor_status()
+{
+    return _tank_sensor_status;
+}
+
+
+
+
+/*
+//temporary location 
+void Copter::createResumePointAtCurrentLocation(int sprayStateForResumePt)
+{
+
+ 
+    // // set new waypoint to current location
+        // Location temp_loc;
+    // const AP_AHRS &ahrs = AP::ahrs();
+    // if(!ahrs.get_position(temp_loc)){
+    //     return MAV_RESULT_FAILED;
+    // }
+        
+        //float altitudeEstimate = 0;
+        //ahrs.get_hagl(altitudeEstimate); 
+        //float inCm = altitudeEstimate * 100.0;
+        //temp_loc.set_alt_cm(inCm, Location::AltFrame::ABOVE_TERRAIN);
+        
+        AP_Mission* mission = AP_Mission::get_singleton();  
+        if(!mission){return;}
+
+        int idx = mission->get_prev_nav_cmd_with_wp_index();  
+        if(idx <= 0 || idx > mission->num_commands()){
+            return;
+        }
+        
+        // create new mission command
+        AP_Mission::Mission_Command wp_cmd = {};
+        AP_Mission::Mission_Command spry_cmd = {};
+        AP_Mission::Mission_Command spd_cmd = {};
+        AP_Mission::Mission_Command prevWptCmd = {}; 
+
+        
+        if(!mission->read_cmd_from_storage(idx, prevWptCmd)){
+            return;
+        }
+
+        if(prevWptCmd.id == MAV_CMD_NAV_TAKEOFF){
+            return; //we do nothing, I originally wanted to use "Failed" but 
+            //it produces a message on QGC and for precisionvision purposes, we don't need to overly complicate. 
+        }
+        
+        Location temp_loc;
+        if(!ahrs.get_position(temp_loc)){
+            return;
+        }
+
+        Location::AltFrame lastWptAltframe = prevWptCmd.content.location.get_alt_frame();
+        int32_t altCm = 0;
+        if(!prevWptCmd.content.location.get_alt_cm(lastWptAltframe,altCm)){
+            return;
+        }
+
+        temp_loc.set_alt_cm(altCm, lastWptAltframe);
+        wp_cmd.content.location = temp_loc;  
+        // make the new command to a waypoint
+        wp_cmd.id = MAV_CMD_NAV_WAYPOINT;
+        //not sure what actually is going to make this trigger, filling it all out. 
+        spry_cmd.id = MAV_CMD_USER_1;
+
+       
+        spry_cmd.p1 = sprayStateForResumePt;
+        AP_Mission::User1_Command sprayInfo;
+        sprayInfo.param1= sprayStateForResumePt;
+        sprayInfo.param2= sprayStateForResumePt;
+        spry_cmd.content.user1 = sprayInfo; 
+
+        AP_Mission::Change_Speed_Command speedchange;
+        spd_cmd.id = MAV_CMD_DO_CHANGE_SPEED;
+        speedchange.speed_type = 1; //specify we want groundspeed
+        speedchange.target_ms = -1;  //indicate no change for now  // packet.param4; //the packet from user should be meters per second
+        speedchange.throttle_pct = -1;
+        spd_cmd.content.speed = speedchange;
+
+        int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
+        AP_Mission::Mission_Command arr[3] = {wp_cmd, spry_cmd, spd_cmd}; // spd_cmd, spry_cmd }; 
+
+        // save command
+        if (copter.mode_auto.mission.insert_cmds(current_wp_idx, arr, 3)) {
+            hal.console->printf("inserted waypoint");
+        }
+}
+*/
+
+
+
 // read baro and log control tuning
 void Copter::update_altitude()
 {
@@ -598,14 +819,6 @@ void Copter::update_altitude()
 //test
 
    
-/*
-     if(i++ % 1000){       
-        hal.gpio->pinMode(54, HAL_GPIO_INPUT);
-         uint8_t pin_state = hal.gpio->read(54);
-          gcs().send_text(MAV_SEVERITY_ALERT, pin_state > 0 ? "high" : "low");
-     }
-*/
-     
 
     if (should_log(MASK_LOG_CTUN)) {
         Log_Write_Control_Tuning();
@@ -642,6 +855,11 @@ Copter::Copter(void)
     // init sensor error logging flags
     sensor_health.baro = true;
     sensor_health.compass = true;
+    
+    _tank_sensor_status = TankSensorState::SENSOR_UNAVAILABLE; 
+
+//    _pvResumeWaypointCreator = new PVResumePointCreator()
+
 }
 
 Copter copter;

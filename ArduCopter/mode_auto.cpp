@@ -810,7 +810,10 @@ void ModeAuto::wp_run()
                     float margin = avoid->get_margin();
                 
                     if( dist > 0 && margin > 0 && dist < margin){
-                            copter.flightmode->set_mode(Mode::Number::BRAKE, ModeReason::AVOIDANCE);
+                        if(copter.control_mode != Mode::Number::BRAKE){
+                            //copter.flightmode->set_mode(Mode::Number::BRAKE, ModeReason::AVOIDANCE);
+                            copter.InsertResumePoint();
+                        }
                     }
                     // (uint16_t)(dist_array.distance[i] * 100.0f), 
                     }
@@ -1216,11 +1219,14 @@ void ModeAuto::do_nav_wp(const AP_Mission::Mission_Command& cmd)
                 case MAV_CMD_NAV_SPLINE_WAYPOINT:
                     // if next command's lat, lon is specified then do not slowdown at this waypoint
                     if ((temp_cmd.content.location.lat != 0) || (temp_cmd.content.location.lng != 0)) {
+                        //printf("fastwayoint donav several is true\n");
                         fast_waypoint = true;
                     }
                     break;
                 case MAV_CMD_NAV_RETURN_TO_LAUNCH:
                     // do not stop for RTL
+                    // printf("fastwayoint MAV_CMD_NAV_RETURN_TO_LAUNCh is true\n");
+
                     fast_waypoint = true;
                     break;
                 case MAV_CMD_NAV_TAKEOFF:

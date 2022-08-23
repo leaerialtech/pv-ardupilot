@@ -79,5 +79,6 @@ enum ap_message : uint8_t {
     MSG_EXTENDED_SYS_STATE,
     MSG_AUTOPILOT_VERSION,
     MSG_PV_SPRAY_STATUS,
+    MSG_PV_TANK_SENSOR_STATUS,
     MSG_LAST // MSG_LAST must be the last entry in this enum
 };

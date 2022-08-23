@@ -13,7 +13,11 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <AP_HAL/AP_HAL.h>
+/////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
+/////////////////////////////////////////////////////////////////
+
+
 #include "AP_Proximity_TeraRangerTower.h"
 #include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_Math/crc.h>
@@ -69,7 +73,8 @@ void AP_Proximity_TeraRangerTower::update(void)
 // get maximum and minimum distances (in meters) of primary sensor
 float AP_Proximity_TeraRangerTower::distance_max() const
 {
-    return 4.5f;
+   // return 4.5f;
+   return 100.0f; //modified for use with mr72 obstacle avoidance radar user manual 
 }
 float AP_Proximity_TeraRangerTower::distance_min() const
 {

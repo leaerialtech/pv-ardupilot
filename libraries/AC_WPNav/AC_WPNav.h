@@ -13,6 +13,7 @@
 #include <AC_AttitudeControl/AC_AttitudeControl.h> // Attitude control library
 #include <AP_Terrain/AP_Terrain.h>
 #include <AC_Avoidance/AC_Avoid.h>                 // Stop at fence library
+#include <stdio.h>
 
 // maximum velocities and accelerations
 #define WPNAV_ACCELERATION              100.0f      // defines the default velocity vs distant curve.  maximum acceleration in cm/s/s that position controller asks for from acceleration controller
@@ -167,7 +168,10 @@ public:
     }
 
     /// set_fast_waypoint - set to true to ignore the waypoint radius and consider the waypoint 'reached' the moment the intermediate point reaches it
-    void set_fast_waypoint(bool fast) { _flags.fast_waypoint = fast; }
+    void set_fast_waypoint(bool fast) {
+         printf("setfast waypoint is %d", (fast ? 1 : 0));
+        _flags.fast_waypoint = fast; 
+        }
     bool is_fast_waypoint(){return _flags.fast_waypoint;}
 
     void resetReachedPreviousWaypoint(){_flags.reached_previous_wpt = false;}

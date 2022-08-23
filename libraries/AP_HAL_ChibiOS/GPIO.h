@@ -14,6 +14,10 @@
  *
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  */
+ 
+ /////////////////////////////////////////////////////////////////
+//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
+/////////////////////////////////////////////////////////////////
 #pragma once
 
 #include "AP_HAL_ChibiOS.h"
@@ -34,6 +38,8 @@ public:
     uint8_t read(uint8_t pin) override;
     void    write(uint8_t pin, uint8_t value) override;
     void    toggle(uint8_t pin) override;
+
+    void    setPalMode(uint8_t pin, uint8_t palmode);
 
     /* Alternative interface: */
     AP_HAL::DigitalSource* channel(uint16_t n) override;

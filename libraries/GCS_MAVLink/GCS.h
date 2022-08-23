@@ -187,7 +187,11 @@ public:
     void send_battery_status(const uint8_t instance) const;
     bool send_battery_status() const;
     void send_distance_sensor() const;
+
+    //precisionvision
     void send_pv_spray_system_status() const; 
+    void send_pv_tank_sensor_status() const;
+
     // send_rangefinder sends only if a downward-facing instance is
     // found.  Rover overrides this!
     virtual void send_rangefinder() const;

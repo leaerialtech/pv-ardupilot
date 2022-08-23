@@ -48,6 +48,9 @@
 #include <stdio.h>
 
 #include <AC_Sprayer/AC_Sprayer.h>
+#include <PV_Resuming/PVResumePointCreator.h>
+using namespace PrecisionVision;
+
 
 //for now, I guess 
 #include "../ArduCopter/Copter.h"
@@ -304,10 +307,22 @@ void GCS_MAVLINK::send_distance_sensor(const AP_RangeFinder_Backend *sensor, con
 
 
 
+void GCS_MAVLINK::send_pv_tank_sensor_status() const 
+{
+
+        TankSensorState tankState = copter.get_tank_sensor_status();
+        mavlink_msg_gopro_heartbeat_send(     
+            chan,
+            tankState == TankSensorState::TANK_EMPTY ? 1 : 0, //1: tank is low, 0 tank is OK is currently the scheme, this may change if we utlilze more advanced sensor 
+            0, //presently unused 
+            0  //presently unused 
+        );
+}
+
 //send our spray_system_status message to the groundstation so that it knows when our mav is spraying or not
 void GCS_MAVLINK::send_pv_spray_system_status() const
 {    
-    
+        //PrecisionVision
     AC_Sprayer *sprayer = AC_Sprayer::get_singleton();
 
 //unless and until we can replace herelink's mavlink-router, I don't believe we can use our own definition. 
@@ -333,17 +348,9 @@ void GCS_MAVLINK::send_pv_spray_system_status() const
         (sprayer->running() > 0 ? on : off),
         val  
     );
-
-
-
-/*
-    mavlink_msg_pv_spray_system_status_send(
-        chan,
-        AP_HAL::millis(),
-        (sprayer->spraying() > 0 ? 1 : 0) 
-    );
-*/
 }
+
+
 
 
 
@@ -3680,24 +3687,24 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_gripper(const mavlink_command_long_t &
 MAV_RESULT GCS_MAVLINK::handle_command_user1(const mavlink_command_long_t &packet) //, int16_t origin_sysid, int16_t origin_compid)
 {
 
-     //   gcs().send_text(MAV_SEVERITY_ALERT, "sweet");
+  
 
     AC_Sprayer *sprayer = AC_Sprayer::get_singleton();
 
 
-//param 1 is unused at the moment, will likely be spray port if spray functionality
-//is offloaded to external device 
+//param 1 will indicate if we should use heading check or not
 
 //param 2 is sprayer desired status (spray on/off)
  
                //copter.rangefinder_state.enabled = packet.param2 > 0;
 
+    bool ignoreHeadingCheck = packet.param1 > 0; 
 
    if(packet.param2 > 0){
-        sprayer->run(true);
+        sprayer->run(true, ignoreHeadingCheck);
      //   gcs().send_text(MAV_SEVERITY_ALERT, "x");
     }else{
-        sprayer->run(false);
+        sprayer->run(false, false);
      //   gcs().send_text(MAV_SEVERITY_ALERT, "z");
     }
 
@@ -3712,83 +3719,9 @@ MAV_RESULT GCS_MAVLINK::handle_command_user2(const mavlink_command_long_t &packe
 
 MAV_RESULT GCS_MAVLINK::handle_command_user3(const mavlink_command_long_t &packet)
 {
-    //AC_Sprayer *sprayer = AC_Sprayer::get_singleton();
 
- // create new mission command
-    AP_Mission::Mission_Command wp_cmd = {};
-    AP_Mission::Mission_Command spry_cmd = {};
-    AP_Mission::Mission_Command spd_cmd = {};
-
-    AP_Mission::Mission_Command prevWptCmd = {}; 
-    AP_Mission* mission = AP_Mission::get_singleton();  
-    if(!mission){return MAV_RESULT_DENIED;}
-
-    int idx = mission->get_prev_nav_cmd_with_wp_index();  
-    if(idx <= 0 || idx > mission->num_commands()){
-        return MAV_RESULT_FAILED;
-    }
-  
-    if(!mission->read_cmd_from_storage(idx, prevWptCmd)){
-        return MAV_RESULT_FAILED;
-    }
-
-    if(prevWptCmd.id == MAV_CMD_NAV_TAKEOFF){
-        return MAV_RESULT_ACCEPTED; //we do nothing, I originally wanted to use "Failed" but 
-        //it produces a message on QGC and for precisionvision purposes, we don't need to overly complicate. 
-    }
-    
-   // // set new waypoint to current location
-      // Location temp_loc;
-   // const AP_AHRS &ahrs = AP::ahrs();
-   // if(!ahrs.get_position(temp_loc)){
-   //     return MAV_RESULT_FAILED;
-   // }
-    
-    //float altitudeEstimate = 0;
-    //ahrs.get_hagl(altitudeEstimate); 
-    //float inCm = altitudeEstimate * 100.0;
-    //temp_loc.set_alt_cm(inCm, Location::AltFrame::ABOVE_TERRAIN);
-    const AP_AHRS &ahrs = AP::ahrs();
-    Location temp_loc;
-    if(!ahrs.get_position(temp_loc)){
-        return MAV_RESULT_FAILED;
-    }
-
-    Location::AltFrame lastWptAltframe = prevWptCmd.content.location.get_alt_frame();
-    int32_t altCm = 0;
-    if(!prevWptCmd.content.location.get_alt_cm(lastWptAltframe,altCm)){
-        return MAV_RESULT_FAILED;
-    }
-    temp_loc.set_alt_cm(altCm, lastWptAltframe);
-    wp_cmd.content.location = temp_loc;  
-
-    // make the new command to a waypoint
-    wp_cmd.id = MAV_CMD_NAV_WAYPOINT;
-
-    //not sure what actually is going to make this trigger, filling it all out. 
-    spry_cmd.id = MAV_CMD_USER_1;
-
-    spry_cmd.p1 = packet.param3 > 0  ? 1 : 0; 
-    AP_Mission::User1_Command sprayInfo;
-    sprayInfo.param1= packet.param3 > 0  ? 1 : 0;
-    sprayInfo.param2= packet.param3 > 0  ? 1 : 0;
-    spry_cmd.content.user1 = sprayInfo; 
-
-    AP_Mission::Change_Speed_Command speedchange;
-    spd_cmd.id = MAV_CMD_DO_CHANGE_SPEED;
-    speedchange.speed_type = 1; //specify we want groundspeed
-    speedchange.target_ms = -1;  //indicate no change for now  // packet.param4; //the packet from user should be meters per second
-    speedchange.throttle_pct = -1;
-    spd_cmd.content.speed = speedchange;
-
-    int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
-
-    AP_Mission::Mission_Command arr[3] = {wp_cmd, spry_cmd, spd_cmd}; // spd_cmd, spry_cmd }; 
-
-    // save command
-
-    if (copter.mode_auto.mission.insert_cmds(current_wp_idx, arr, 3)) {
-        hal.console->printf("inserted waypoint");
+    if(copter.control_mode != Mode::Number::BRAKE){
+        copter.InsertResumePoint();
     }
 
 
@@ -4526,6 +4459,10 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
 
     case MSG_PV_SPRAY_STATUS:
         send_pv_spray_system_status();
+        break;
+
+    case MSG_PV_TANK_SENSOR_STATUS:
+        send_pv_tank_sensor_status();
         break;
 
     case MSG_CAMERA_FEEDBACK:

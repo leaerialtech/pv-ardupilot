@@ -197,6 +197,14 @@
 
 #include "mode.h"
 
+typedef enum class _TankSensorState {
+    SENSOR_UNAVAILABLE = -1,
+    TANK_EMPTY = 0,
+    TANK_FULL = 1,
+} TankSensorState;
+
+
+
 class Copter : public AP_Vehicle {
 public:
 
@@ -256,6 +264,10 @@ public:
     void loop() override;
 
 private:
+
+    TankSensorState _tank_sensor_status;
+    
+
     static const AP_FWVersion fwver;
 
     // key aircraft parameters passed to multiple libraries
@@ -280,13 +292,12 @@ private:
     AP_Logger logger;
 
 
-
-
     // flight modes convenience array
     AP_Int8 *flight_modes;
     const uint8_t num_flight_modes = 6;
 
-public: //remove this line
+    //PrecisionVision hack until refactor:
+    public: 
     struct RangeFinderState {
         bool enabled:1;
         bool alt_healthy:1; // true if we can trust the altitude from the rangefinder
@@ -688,6 +699,16 @@ public: //remove this line
     void read_AHRS(void);
     void update_altitude();
 
+    public: //temporary until proper refactoring 
+    //PrecisionVision: 
+    void update_tank_sensor();
+    TankSensorState get_tank_sensor_status();
+    //void TestMakeResumepoint();
+
+    void InsertResumePoint();
+    
+
+
     // Attitude.cpp
     float get_pilot_desired_yaw_rate(int16_t stick_angle);
     void update_throttle_hover();
@@ -1011,6 +1032,9 @@ public: //remove this line
     // mode.cpp
     Mode *mode_from_mode_num(const Mode::Number mode);
     void exit_mode(Mode *&old_flightmode, Mode *&new_flightmode);
+
+
+int _mycount =0;
 
 public:
     void mavlink_delay_cb();    // GCS_Mavlink.cpp

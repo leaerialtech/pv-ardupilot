@@ -111,8 +111,13 @@ public:
         k_param_angle_max,
         k_param_gps_hdop_good,
         k_param_battery,
-        k_param_fs_batt_mah,            // unused - moved to AP_BattMonitor
-        k_param_angle_rate_max,         // remove
+        
+        //PrecisionVision will repurpose this unused item, despite the advice given by ardupilot, we are unconcerned with reusing old params as none of our equipment should ever have used this value
+        k_param_pvbatt_thresh,  //the precision vision battery threshold, really this is just a storage mechanism for our GCS to be aware of. at least until we get some sort of "smart battery" capability where the parameter sticks with the battery. we could alternatively hard-code these into a frame or configuration type I guess  
+        //k_param_fs_batt_mah,            // unused - moved to AP_BattMonitor
+        k_param_pvtank_pin,
+        
+        //k_param_angle_rate_max,         // remove
         k_param_rssi_range,             // unused, replaced by rssi_ library parameters
         k_param_rc_feel_rp,             // deprecated
         k_param_NavEKF,                 // deprecated - remove
@@ -464,6 +469,12 @@ public:
     AP_Float                acro_balance_pitch;
     AP_Int8                 acro_trainer;
     AP_Float                acro_rp_expo;
+
+
+    //this is implemented as a way for LEA to store the precisionvision battery threshold for the drone
+    AP_Float  pvbatt_thresh;
+    AP_Int8  pvtank_pin;
+
 
     // Note: keep initializers here in the same order as they are declared
     // above.

@@ -88,7 +88,7 @@ bool AP_Mission::start_command_user_1(const AP_Mission::Mission_Command &cmd)
             }
             
 
-           sprayer->run(cmd.p1 > 0);
+           sprayer->run(cmd.p1 > 0, cmd.content.user1.param3 > 0);
             
             /*
             if(cmd.p1 > 0){

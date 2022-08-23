@@ -51,7 +51,7 @@ public:
     static AC_Sprayer *_singleton;
 
     /// run - allow or disallow spraying to occur
-    void run(bool true_false);
+    void run(bool true_false, bool ignore_heading_checks);
 
     /// running - returns true if spraying is currently permitted
     bool running() const { return _flags.running; }
@@ -105,6 +105,7 @@ AP_Int16 _spray_door_pwm_desired;  //SPRAY_DOOR_PWM_DESIRED;
         uint8_t spraying    : 1;            ///< 1 if we are currently spraying
         uint8_t testing     : 1;            ///< 1 if we are testing the sprayer and should output a minimum value
         uint8_t running     : 1;            ///< 1 if we are permitted to run sprayer
+        uint8_t ignore_heading_check : 1; // PrecisionVision:  < 1 means we don't turn spray on unless the heading is within a certain range. 
     } _flags;
 
     // internal variables

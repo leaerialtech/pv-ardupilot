@@ -15,6 +15,7 @@ SOURCE_EXTS = [
     '*.S',
     '*.c',
     '*.cpp',
+    'PrecisionVision/*.cpp'
 ]
 
 COMMON_VEHICLE_DEPENDENT_LIBRARIES = [

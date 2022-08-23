@@ -372,6 +372,7 @@ def _build_cmd_tweaks(bld):
         bld.options.all_tests = True
         bld.cmd = 'check'
 
+
     if bld.cmd == 'check':
         if not bld.env.HAS_GTEST:
             bld.fatal('check: gtest library is required')
@@ -446,6 +447,8 @@ def _build_recursion(bld):
         'libraries/*/tests',
         'libraries/*/utility/tests',
         'libraries/*/benchmarks',
+        'ArduCopter/tests/*',
+	    'ArduCopter/PrecisionVision/*'
     ]
 
     common_dirs_excl = [
@@ -503,6 +506,8 @@ def _load_pre_build(bld):
     if getattr(brd, 'pre_build', None):
         brd.pre_build(bld)    
 
+
+
 def build(bld):
     config_hash = Utils.h_file(bld.bldnode.make_node('ap_config.h').abspath())
     bld.env.CCDEPS = config_hash
@@ -544,6 +549,12 @@ ardupilotwaf.build_command('check',
     program_group_list='all',
     doc='builds all programs and run tests',
 )
+
+ardupilotwaf.build_command('copter-testall',
+    program_group_list='copter',
+    doc='builds all programs and run tests',
+)
+
 ardupilotwaf.build_command('check-all',
     program_group_list='all',
     doc='shortcut for `waf check --alltests`',

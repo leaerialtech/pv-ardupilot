@@ -393,13 +393,6 @@ public:
     ///     cmd.index is updated with it's new position in the mission
     bool add_cmd(Mission_Command& cmd);
 
-
-    //custom precisionvision code for inserting resume waypoint.
-    //hopefully not dangerous! 
-    bool insert_cmds(uint16_t index,  Mission_Command cmd[], int numCmds=1);
-
-
-
     /// replace_cmd - replaces the command at position 'index' in the command list with the provided cmd
     ///     replacing the current active command will have no effect until the command is restarted
     ///     returns true if successfully replaced, false on failure

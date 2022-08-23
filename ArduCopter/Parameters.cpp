@@ -36,6 +36,9 @@
 #endif
 
 const AP_Param::Info Copter::var_info[] = {
+
+
+
     // @Param: SYSID_SW_MREV
     // @DisplayName: Eeprom format version number
     // @Description: This value is incremented when changes are made to the eeprom format
@@ -558,6 +561,24 @@ const AP_Param::Info Copter::var_info[] = {
     // @Path: ../libraries/AP_Logger/AP_Logger.cpp
     GOBJECT(logger,           "LOG",  AP_Logger),
 
+
+   // @Param: PVBATT_THRESH
+    // @DisplayName: PrecisionVision Battery Threshold
+    // @Description: Mechanism for PV to store a warning threshold level calibrated to the UAS built flying this firmware.  Right now just a storage mechanism for the GCS to read
+    // @Range: 0.0 100.0
+    // @Increment: 0.01
+    // @User: Standard
+    GSCALAR(pvbatt_thresh, "PVBATT_THRESH", 49.2),
+
+   // @Param: FLTMODE1
+    // @DisplayName: Flight Mode 1
+    // @Description: Flight mode when Channel 5 pwm is <= 1230
+    // @Values: 0:Stabilize,1:Acro,2:AltHold,3:Auto,4:Guided,5:Loiter,6:RTL,7:Circle,9:Land,11:Drift,13:Sport,14:Flip,15:AutoTune,16:PosHold,17:Brake,18:Throw,19:Avoid_ADSB,20:Guided_NoGPS,21:Smart_RTL,22:FlowHold,23:Follow,24:ZigZag,25:SystemID,26:Heli_Autorotate
+    // @User: Standard
+    GSCALAR(pvtank_pin, "PVTANK_PIN",   (uint8_t)55),  //default to aux pin 1 
+
+    
+
     // @Group: BATT
     // @Path: ../libraries/AP_BattMonitor/AP_BattMonitor.cpp
     GOBJECT(battery,                "BATT",         AP_BattMonitor),
@@ -1077,7 +1098,7 @@ const AP_Param::ConversionInfo conversion_table[] = {
     { Parameters::k_param_arming_check_old,   0,      AP_PARAM_INT8,  "ARMING_CHECK" },
     // battery
     { Parameters::k_param_fs_batt_voltage,    0,      AP_PARAM_FLOAT,  "BATT_LOW_VOLT" },
-    { Parameters::k_param_fs_batt_mah,        0,      AP_PARAM_FLOAT,  "BATT_LOW_MAH" },
+    //{ Parameters::k_param_fs_batt_mah,        0,      AP_PARAM_FLOAT,  "BATT_LOW_MAH" },  //we repurposed this one in precisionvision
     { Parameters::k_param_failsafe_battery_enabled,0, AP_PARAM_INT8,   "BATT_FS_LOW_ACT" },
 
     { Parameters::Parameters::k_param_ch7_option_old,   0,      AP_PARAM_INT8,  "RC7_OPTION" },
