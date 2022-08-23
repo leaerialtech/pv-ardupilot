@@ -33,7 +33,7 @@ void ModeRTL::restart_without_terrain()
         terrain_following_allowed = false;
         _state = RTL_Starting;
         _state_complete = true;
-        gcs().send_text(MAV_SEVERITY_CRITICAL, "Restarting RTL - Terrain data missing");
+        gcs().send_text(MAV_SEVERITY_CRITICAL,"Restarting RTL - Terrain data missing");
     }
 }
 

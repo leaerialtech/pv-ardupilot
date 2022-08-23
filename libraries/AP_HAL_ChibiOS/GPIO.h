@@ -14,10 +14,6 @@
  *
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  */
- 
- /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
-/////////////////////////////////////////////////////////////////
 #pragma once
 
 #include "AP_HAL_ChibiOS.h"

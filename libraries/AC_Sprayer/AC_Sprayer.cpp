@@ -91,6 +91,7 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     AP_GROUPINFO("DR_DES",   13, AC_Sprayer, _spray_door_pwm_desired, 0),
 
 
+    AP_GROUPINFO("HD_INT", 14, AC_Sprayer, _heading_interval, 15),
 
 
 
@@ -253,7 +254,7 @@ void AC_Sprayer::update()
                     if(!waitForHeadingChange){
                         should_be_spraying = true;
                     }else{
-                        should_be_spraying = (diff < 25 || diff > 345);
+                        should_be_spraying = (diff < _heading_interval || diff > (360.0-_heading_interval));
                     }
                 
                     _speed_over_min_time = 0;
@@ -261,7 +262,7 @@ void AC_Sprayer::update()
             }
         }else{
               if(waitForHeadingChange){
-                  should_be_spraying = (diff < 10 || diff > 350);
+                  should_be_spraying = (diff < _heading_interval || diff > (360.0-_heading_interval));
                }
         }
         // reset the speed under timer

@@ -76,6 +76,9 @@ public:
 
 private:
 
+
+ 
+    //PrecisionVision:
     // parameters
     AP_Int8         _config;    //use to be _enabled   ///< top level control for spray type (disabled, liquid, granular)
     AP_Float        _pump_pct_1ms;          ///< desired pump rate (expressed as a percentage of top rate) when travelling at 1m/s
@@ -83,10 +86,8 @@ private:
     AP_Int16        _spinner_pwm;           ///< pwm rate of spinner
     AP_Float        _speed_min;             ///< minimum speed in cm/s above which the sprayer will be started
  
- 
-    //PrecisionVision:
-AP_Float _swath_width;            //distance in meters that the boom/rig is set to output (we use this to output to observers, possibly do calculations in future) 
-
+    AP_Float _swath_width;            //distance in meters that the boom/rig is set to output (we use this to output to observers, possibly do calculations in future) 
+    AP_Float _heading_interval;
 
 AP_Int16 _spray_motor_pwm_default; //SPRAY_MOTOR_PWM_DEFAULT;
 AP_Int16 _spray_motor_pwm_range_min; //SPRAY_MOTOR_PWM_RANGE_MIN;

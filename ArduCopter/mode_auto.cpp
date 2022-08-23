@@ -811,8 +811,9 @@ void ModeAuto::wp_run()
                 
                     if( dist > 0 && margin > 0 && dist < margin){
                         if(copter.control_mode != Mode::Number::BRAKE){
-                            //copter.flightmode->set_mode(Mode::Number::BRAKE, ModeReason::AVOIDANCE);
-                            copter.InsertResumePoint();
+
+                            //insertResumepoint is also doing the brake logic                            
+                            copter.BrakeAndInsertResumePointIfNeeded();
                         }
                     }
                     // (uint16_t)(dist_array.distance[i] * 100.0f), 

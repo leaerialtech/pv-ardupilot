@@ -366,6 +366,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
             break;
         default:
             _usage();
+            printf("_parse_command_line default exit! Check startup parameters passed in! ");
             exit(1);
         }
     }

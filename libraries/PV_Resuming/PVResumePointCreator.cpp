@@ -6,6 +6,7 @@
 
 #include "../ArduCopter/Copter.h"
 
+
 namespace PrecisionVision
 {
 
@@ -53,7 +54,7 @@ namespace PrecisionVision
 
         if (prevWptCmd.id == MAV_CMD_NAV_TAKEOFF)
         {
-            return ERRCODE::PV_ERC_FAIL; //we do nothing, I originally wanted to use "Failed" but
+      //      return ERRCODE::PV_ERC_FAIL; //we do nothing, I originally wanted to use "Failed" but
             //it produces a message on QGC and for precisionvision purposes, we don't need to overly complicate.
         }
 
@@ -65,25 +66,21 @@ namespace PrecisionVision
 
     
 
-        Location::AltFrame lastWptAltframe = prevWptCmd.content.location.get_alt_frame();
+        Location::AltFrame lastWptAltframe_ArduValue = prevWptCmd.content.location.get_alt_frame();
+       // printf("Last ardu-alt frame %d", (int)lastWptAltframe_ArduValue); //unfortunately, the altframe here is NOT the same as the mavlink-alt enum used by PV/QGC. 
         int32_t altCm = 0;
-        if (!prevWptCmd.content.location.get_alt_cm(lastWptAltframe, altCm))
-        {
+        if (!prevWptCmd.content.location.get_alt_cm(lastWptAltframe_ArduValue, altCm)){
             return ERRCODE::PV_ERC_FAIL;
         }
-
 
         //WARNING: do not confuse nav_delay with "content.delay" which I guess is conditional.
         //caution, you can only choose one "type" - so if you set cmd.content.location, you can't use any of the other ones
         //also - its seems "p1" in ardupilot specifies the hold/delay time that would be put in the actual mavlink command.
         //using content.location.delay or content.location.nav_delay must be other message types. 
 
-
         wp_cmd.id = MAV_CMD_NAV_WAYPOINT;
-       // wp_cmd.p1 = 1;  //this would put a delay, but it actually makes things weird. I think the better thing to do is to somehow 
-        printf("Last alt frame %d", (int)lastWptAltframe);
 
-        temp_loc.set_alt_cm(altCm, lastWptAltframe);
+        temp_loc.set_alt_cm(altCm, lastWptAltframe_ArduValue);
         wp_cmd.content.location = temp_loc;
         // make the new command to a waypoint
 
@@ -92,11 +89,8 @@ namespace PrecisionVision
 
         spry_cmd.p1 = sprayState;
         AP_Mission::User1_Command sprayInfo;
-        
-        sprayInfo.param1 = 0;
-        sprayInfo.param3 = sprayState > 0 ? 0 : 0;
+        sprayInfo.param1 = sprayState > 0 ? 1 : 0; //ignore heading checks if sprayon! 
         sprayInfo.param2 = sprayState;
-    
 
         spry_cmd.content.user1 = sprayInfo;
 

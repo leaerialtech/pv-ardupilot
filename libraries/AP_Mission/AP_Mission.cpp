@@ -1442,7 +1442,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         break;
 
  case MAV_CMD_USER_1:
-        packet.param1 = cmd.content.user1.param1; 
+        packet.param1 = cmd.content.user1.param1; //not sure if this line is a bug? 
         packet.param2 = cmd.content.user1.param2; //cmd.p1;
         packet.param3 = cmd.content.user1.param3;
         packet.param4 = cmd.content.user1.param4;

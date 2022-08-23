@@ -169,7 +169,7 @@ public:
 
     /// set_fast_waypoint - set to true to ignore the waypoint radius and consider the waypoint 'reached' the moment the intermediate point reaches it
     void set_fast_waypoint(bool fast) {
-         printf("setfast waypoint is %d", (fast ? 1 : 0));
+         printf("set fast waypoint is %d\n", (fast ? 1 : 0));
         _flags.fast_waypoint = fast; 
         }
     bool is_fast_waypoint(){return _flags.fast_waypoint;}

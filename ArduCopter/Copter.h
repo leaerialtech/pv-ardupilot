@@ -705,7 +705,7 @@ private:
     TankSensorState get_tank_sensor_status();
     //void TestMakeResumepoint();
 
-    void InsertResumePoint();
+    void BrakeAndInsertResumePointIfNeeded();
     
 
 

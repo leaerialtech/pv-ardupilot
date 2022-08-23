@@ -188,9 +188,12 @@ public:
     bool send_battery_status() const;
     void send_distance_sensor() const;
 
+public:
     //precisionvision
     void send_pv_spray_system_status() const; 
     void send_pv_tank_sensor_status() const;
+    void send_resume_point_details_back_to_gcs(int current_wp_idx, int newMissionSize, float lat, float lng, float alt, int altFrame, bool wasSpraying);
+
 
     // send_rangefinder sends only if a downward-facing instance is
     // found.  Rover overrides this!
@@ -839,10 +842,15 @@ public:
     void send_text(MAV_SEVERITY severity, const char *fmt, ...) FMT_PRINTF(3, 4);
     void send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list);
     virtual void send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, const char *text);
+   
     void service_statustext(void);
+    void service_pvresumepoint(void);
+
+
     virtual GCS_MAVLINK *chan(const uint8_t ofs) = 0;
     virtual const GCS_MAVLINK *chan(const uint8_t ofs) const = 0;
     // return the number of valid GCS objects
+    
     uint8_t num_gcs() const { return _num_gcs; };
     void send_message(enum ap_message id);
     void send_mission_item_reached_message(uint16_t mission_index);
@@ -858,6 +866,10 @@ public:
     static MissionItemProtocol_Fence *_missionitemprotocol_fence;
     MissionItemProtocol *get_prot_for_mission_type(const MAV_MISSION_TYPE mission_type) const;
     void try_send_queued_message_for_type(MAV_MISSION_TYPE type);
+
+
+    void send_resume_point_details_back_to_gcs(int current_wp_idx, int newMissionSize, float lat, float lng, float alt, int altFrame, bool wasSpraying);
+
 
     void update_send();
     void update_receive();
@@ -920,6 +932,10 @@ protected:
 
 private:
 
+
+    void _runStatustextService();
+    void _runResumepointService();
+
     static GCS *_singleton;
 
     void create_gcs_mavlink_backend(GCS_MAVLINK_Parameters &params,
@@ -929,6 +945,14 @@ private:
         uint8_t                 bitmask;
         mavlink_statustext_t    msg;
     };
+
+
+    //this could be repurposed for any simmilar mavlink command I suppose
+    struct pvresume_t {
+        uint8_t                 bitmask;
+        mavlink_command_long_t  msg;
+    };
+
 
     void update_sensor_status_flags();
 
@@ -942,8 +966,14 @@ private:
     // from multiple threads
     HAL_Semaphore _statustext_sem;
 
+    //something simmilar I guess will be needed for our resume point info
+    HAL_Semaphore _pv_resumepoint_sem; 
+
+
     // queue of outgoing statustext messages
     ObjectArray<statustext_t> _statustext_queue{_status_capacity};
+    ObjectArray<pvresume_t> _pv_resumepoint_queue{5};
+
 
     // true if we have already allocated protocol objects:
     bool initialised_missionitemprotocol_objects;

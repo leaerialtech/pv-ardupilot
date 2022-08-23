@@ -156,7 +156,6 @@ AC_WPNav::AC_WPNav(const AP_InertialNav& inav, const AP_AHRS_View& ahrs, AC_PosC
     _flags.reached_destination = false;
     _flags.waypoint_completed = false; 
     _flags.fast_waypoint = false;
-     printf("xx fastwaypoint init is false\n");
     _flags.slowing_down = false;
     _flags.recalc_wp_leash = false;
     _flags.new_wp_destination = false;
@@ -334,7 +333,6 @@ bool AC_WPNav::set_wp_origin_and_destination(const Vector3f& origin, const Vecto
     _flags.reached_destination = false;
     _flags.waypoint_completed = false; 
     _flags.fast_waypoint = false;   // default waypoint back to slow
-     printf("xx fastwaypoint is false reset acWPNav.cpp\n");
     _flags.slowing_down = false;    // target is not slowing down yet
     _flags.segment_type = SEGMENT_STRAIGHT;
     _flags.new_wp_destination = true;   // flag new waypoint so we can freeze the pos controller's feed forward and smooth the transition
@@ -850,7 +848,6 @@ bool AC_WPNav::set_spline_origin_and_destination(const Vector3f& origin, const V
     case SEGMENT_END_STOP:
         // if vehicle stops at the destination set destination velocity to 0.02 * distance vector from origin to destination
         _spline_destination_vel = (destination - origin) * dt;
-        printf("xx fastwaypoint SEGMENT_END_STOP is false\n");
         _flags.fast_waypoint = false;
         break;
 
@@ -858,13 +855,11 @@ bool AC_WPNav::set_spline_origin_and_destination(const Vector3f& origin, const V
         // if next segment is straight, vehicle's final velocity should face along the next segment's position
         _spline_destination_vel = (next_destination - destination);
         _flags.fast_waypoint = true;
-         printf("xx fastwaypoint SEGMENT_END_STRAIGHT is true\n");
         break;
 
     case SEGMENT_END_SPLINE:
         // if next segment is splined, vehicle's final velocity should face parallel to the line from the origin to the next destination
         _spline_destination_vel = (next_destination - origin);
-        printf("xx fastwaypoint SEGMENT_END_SPLINE is true\n");
         _flags.fast_waypoint = true;
         break;
     }

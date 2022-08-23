@@ -1,9 +1,9 @@
 #ifndef PVRESUME_POINT_CREATOR_xx_H
 #define PVRESUME_POINT_CREATOR_xx_H
 
-#include "../ArduCopter/Copter.h"
 #include <AP_Mission/AP_Mission.h>
 #include <AP_AHRS/AP_AHRS.h>
+#include <AC_Sprayer/AC_Sprayer.h>
 
 
 namespace PrecisionVision

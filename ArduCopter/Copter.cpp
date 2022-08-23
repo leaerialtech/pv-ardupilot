@@ -614,6 +614,12 @@ void Copter::update_tank_sensor()
         //    return; 
         //}
 
+        //TODO: we need to insert the resume waypoint,
+        //but I think we have to send a signal to the GCS that the waypoints have changed.
+        //maybe a refactoring such that we send a signal and the resume point doesn't show up on the
+        //gcs (finalized) until it gets the message.  
+
+
         //if we WERE full, and now we are not, send it into brake mode! 
         if(_tank_sensor_status == TankSensorState::TANK_FULL  && pin_state == 0){
             //BUT only do so if A.) we are flying, B.) in regular auto mode (not loiter, takeoff, landing, or rtl, etc.)
@@ -629,11 +635,12 @@ void Copter::update_tank_sensor()
                 {      
                     if(!flightmode->is_taking_off() && !flightmode->is_landing()){
                         if(copter.control_mode != Mode::Number::BRAKE){
-                            InsertResumePoint();      
+                            BrakeAndInsertResumePointIfNeeded();      
                         }
                     }
                 }
             }
+            
         }
     
     
@@ -642,72 +649,102 @@ void Copter::update_tank_sensor()
 
 
 
-void Copter::InsertResumePoint(){
-hal.console->printf("Insert ResumePoint Called.... ");
-printf("insert ResumePoint Called.... ");
-      bool wasSpraying = copter.sprayer.spraying();
+void Copter::BrakeAndInsertResumePointIfNeeded()
+{
+    hal.console->printf("BrakeAndInsertResumePointIfNeeded\n"); 
+    printf("BrakeAndInsertResumePointIfNeeded\n");
+    bool wasSpraying = copter.sprayer.spraying();
 
-                        set_mode(Mode::Number::BRAKE, ModeReason::FAILSAFE);
+    int curnavidx = -1;
+    if(copter.control_mode == Mode::Number::AUTO){
+        curnavidx = copter.mode_auto.mission.get_prev_nav_cmd_with_wp_index();
+    }
 
-                        int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
-                        int oMissionSize = copter.mode_auto.mission.num_commands();
-                        if(oMissionSize < copter.mode_auto.mission.num_commands_max()){
-                        
-                        //send a USER_3 command back to the GCS, **do not confuse with GCS sending USER_3 to us! 
-                        //when we send MAV_CMD_USER_3 to the GCS, we are informing that we have inserted
-                        //a resume point. Right now, we can only use existing messages in the mavlink dialect
-                        //otherwise we have to compile special commands in the mavlink router for PrecisionVision
+    set_mode(Mode::Number::BRAKE, ModeReason::FAILSAFE);
+    if(!copter.wp_nav->reached_prev_wpt())
+    {
+        //if we haven't reached a waypoint already, we don't do any inserts. 
+        hal.console->printf("Not yet reached prev_wpt, skipping resume generaton\n");
+        return;
+    }else
+    {
+        hal.console->printf("prev_wpt is true, checking takeoff condition...\n");
 
-                        PVResumePointCreator resumeMaker(
-                            *AP_Mission::get_singleton(),
-                             AP::ahrs(),
-                            *AC_Sprayer::get_singleton()
-                        );
-                        
-                        ERRCODE result = resumeMaker.CreateResumePointAtCurrentUavLocationAndState();
-                        copter.sprayer.run(false,false); //important that this comes after the creation so it detects spray state, smells like a refactor would be good though!
+        hal.console->printf("current_nav_index is %d\n",curnavidx);
+        if(curnavidx <= 3)
+        {
+          hal.console->printf("still in takeoff waypoint command range, skipping resume");
+          return;
+        }
 
-                        if((int)result  > 0)
-                        {
+    }
+    
+    int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
+    int oMissionSize = copter.mode_auto.mission.num_commands();
+    if(oMissionSize < copter.mode_auto.mission.num_commands_max())
+    {           
+        //send a USER_3 command back to the GCS, **do not confuse with GCS sending USER_3 to us! 
+        //when we send MAV_CMD_USER_3 to the GCS, we are informing that we have inserted
+        //a resume point. Right now, we can only use existing messages in the mavlink dialect
+        //otherwise we have to compile special commands in the mavlink router for PrecisionVision
 
-                            hal.console->printf("Resumepoint created successful, sending cmd...");
-                                    printf("resumepoint created successful, sending cmd...");
-
-                            int newMissionSize = copter.mode_auto.mission.num_commands();
-                            //grab the wpt cmd from the mission
+        PVResumePointCreator resumeMaker(
+        *AP_Mission::get_singleton(),
+        AP::ahrs(),
+        *AC_Sprayer::get_singleton()
+        );
                             
-                            AP_Mission::Mission_Command chkCmd; 
-                            copter.mode_auto.mission.read_cmd_from_storage(current_wp_idx, chkCmd);
+        ERRCODE result = resumeMaker.CreateResumePointAtCurrentUavLocationAndState();
+        copter.sprayer.run(false,false); //important that this comes after the creation so it detects spray state, smells like a refactor would be good though!
 
-                            if(newMissionSize != oMissionSize)
-                            {
-                                mavlink_msg_command_long_send(
-                                MAVLINK_COMM_0, //assuming only one channel back to gcs 
-                                0,
-                                0,
-                                MAV_CMD_USER_3,
-                                0,
-                                //param1
-                                (float) current_wp_idx, //resume wpt index (this would be the next wpt.)
-                                //param2
-                                (float) newMissionSize, //new total number of wpts stored onboard 
-                                //param3
-                                chkCmd.content.location.lat, 
-                                //param4
-                                chkCmd.content.location.lng,
-                                //param5
-                                chkCmd.content.location.alt,
-                                //param6
-                                (int)chkCmd.content.location.get_alt_frame(),
-                                //param7
-                                    wasSpraying ? 1 : 0);
+        if((int)result  > 0)
+        {   
+            hal.console->printf("Resumepoint created successful, sending cmd...");
+            printf("resumepoint created successful, sending cmd...");
 
-                                }
-                            }
-                        }else{
-                            hal.console->printf("Resume point creation failed!");
-                              printf("resume point creation failed!");
-                        }
+            int newMissionSize = copter.mode_auto.mission.num_commands();
+            //grab the wpt cmd from the mission
+                                
+            AP_Mission::Mission_Command chkCmd; 
+            copter.mode_auto.mission.read_cmd_from_storage(current_wp_idx, chkCmd);
+
+
+            //AltitudeModeNone,           // Being used as distance value unrelated to ground (for example distance to structure\
+            //AltitudeModeRelative,       // MAV_FRAME_GLOBAL_RELATIVE_ALT Global (WGS84) coordinate frame + altitude relative to the home position. First value / x: latitude, second value / y: longitude, third value / z: positive altitude with 0 being at the altitude of the home location.
+            //AltitudeModeAbsolute,       // MAV_FRAME_GLOBAL: Global (WGS84) coordinate frame + MSL altitude. First value / x: latitude, second value / y: longitude, third value / z: positive altitude over mean sea level (MSL).
+            //AltitudeModeAboveTerrain,   // Absolute altitude above terrain calculated from terrain data -- this is a QGC only feature where it is sending AMSL after calculating locally against terrain data.  I believe more recent QGC now implements TERRAIN_REQUEST so not sure if this mode is used now?
+            //AltitudeModeTerrainFrame    // MAV_FRAME_GLOBAL_TERRAIN_ALT  //informs ardupilot to use terrain data onboard (either obtained by requesting terrain_data from the qgc, i believe TERRAIN_DATA_REQUEST, or by using onboard rangefinders
+                                
+            int mavlink_altitude_frame_being_used = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+            if (chkCmd.content.location.relative_alt) {
+                mavlink_altitude_frame_being_used = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+            }else if(chkCmd.content.location.terrain_alt){
+                mavlink_altitude_frame_being_used = MAV_FRAME_GLOBAL_TERRAIN_ALT;
+            }
+            else{
+                mavlink_altitude_frame_being_used = MAV_FRAME_GLOBAL;
+            }
+
+            if(newMissionSize != oMissionSize)
+            {
+                gcs().send_resume_point_details_back_to_gcs(
+                                        current_wp_idx,
+                                        newMissionSize,
+                                        chkCmd.content.location.lat, 
+                                        chkCmd.content.location.lng,
+                                        chkCmd.content.location.alt,
+                                        mavlink_altitude_frame_being_used,
+                                        wasSpraying ? 1 : 0
+                );
+
+            }
+        }
+    }
+    else
+    {
+        hal.console->printf("Resume point creation failed!\n");
+        printf("resume point creation failed!\n");
+    }
 }
 
 

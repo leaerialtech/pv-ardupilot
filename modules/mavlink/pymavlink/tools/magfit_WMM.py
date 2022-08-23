@@ -212,10 +212,7 @@ def remove_offsets(MAG, BAT, c):
     correction_matrix = Matrix3(Vector3(c.diag.x,    c.offdiag.x, c.offdiag.y),
                                 Vector3(c.offdiag.x, c.diag.y,    c.offdiag.z),
                                 Vector3(c.offdiag.y, c.offdiag.z, c.diag.z))
-    try:
-        correction_matrix = correction_matrix.invert()
-    except Exception:
-        return False
+    correction_matrix = correction_matrix.invert()
 
     field = Vector3(MAG.MagX, MAG.MagY, MAG.MagZ)
     if BAT is not None and not math.isnan(BAT.Curr):
@@ -283,8 +280,6 @@ def magfit(logfile):
     old_corrections.diag = Vector3(parameters.get('COMPASS_DIA%s_X' % mag_idx,1.0),
                                    parameters.get('COMPASS_DIA%s_Y' % mag_idx,1.0),
                                    parameters.get('COMPASS_DIA%s_Z' % mag_idx,1.0))
-    if old_corrections.diag == Vector3(0,0,0):
-        old_corrections.diag = Vector3(1,1,1)
     old_corrections.offdiag = Vector3(parameters.get('COMPASS_ODI%s_X' % mag_idx,0.0),
                                       parameters.get('COMPASS_ODI%s_Y' % mag_idx,0.0),
                                       parameters.get('COMPASS_ODI%s_Z' % mag_idx,0.0))
@@ -310,8 +305,6 @@ def magfit(logfile):
     print("Extracted %u points" % len(data))
     print("Current: %s diag: %s offdiag: %s cmot: %s scale: %.2f" % (
         old_corrections.offsets, old_corrections.diag, old_corrections.offdiag, old_corrections.cmot, old_corrections.scaling))
-    if len(data) == 0:
-        return
 
     # do fit
     c = fit_WWW()

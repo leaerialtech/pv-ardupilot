@@ -16,10 +16,6 @@
 /*
  *       RC_Channel.cpp - class for one RC channel input
  */
- 
-/////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
-/////////////////////////////////////////////////////////////////
 
 #include <stdlib.h>
 #include <cmath>

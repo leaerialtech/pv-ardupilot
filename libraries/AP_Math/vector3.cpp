@@ -414,6 +414,15 @@ Matrix3<T> Vector3<T>::mul_rowcol(const Vector3<T> &v2) const
                       v1.z * v2.x, v1.z * v2.y, v1.z * v2.z);
 }
 
+// extrapolate position given bearing and pitch (in degrees) and distance
+template <typename T>
+void Vector3<T>::offset_bearing(T bearing, T pitch, T distance)
+{
+    y += cosF(radians(pitch)) * sinF(radians(bearing)) * distance;
+    x += cosF(radians(pitch)) * cosF(radians(bearing)) * distance;
+    z += sinF(radians(pitch)) * distance;
+}
+
 // distance from the tip of this vector to a line segment specified by two vectors
 template <typename T>
 float Vector3<T>::distance_to_segment(const Vector3<T> &seg_start, const Vector3<T> &seg_end) const

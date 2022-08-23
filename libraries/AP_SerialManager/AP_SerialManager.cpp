@@ -511,7 +511,11 @@ AP_HAL::UARTDriver *AP_SerialManager::find_serial(enum SerialProtocol protocol, 
     }
     return _state->uart;
 }
-
+// have_serial - return true if we have the given serial protocol configured
+bool AP_SerialManager::have_serial(enum SerialProtocol protocol, uint8_t instance) const
+{
+    return find_protocol_instance(protocol, instance) != nullptr;
+}
 // find_baudrate - searches available serial ports for the first instance that allows the given protocol
 //  instance should be zero if searching for the first instance, 1 for the second, etc
 //  returns baudrate on success, 0 if a serial port cannot be found
@@ -522,6 +526,16 @@ uint32_t AP_SerialManager::find_baudrate(enum SerialProtocol protocol, uint8_t i
         return 0;
     }
     return map_baudrate(_state->baud);
+}
+
+// find_portnum - find port number (SERIALn index) for a protocol and instance, -1 for not found
+int8_t AP_SerialManager::find_portnum(enum SerialProtocol protocol, uint8_t instance) const
+{
+    const struct UARTState *_state = find_protocol_instance(protocol, instance);
+    if (_state == nullptr) {
+        return -1;
+    }
+    return int8_t(_state - &state[0]);
 }
 
 // get_mavlink_channel - provides the mavlink channel associated with a given protocol

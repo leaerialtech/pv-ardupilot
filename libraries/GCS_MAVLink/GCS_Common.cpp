@@ -101,6 +101,25 @@ GCS_MAVLINK::GCS_MAVLINK(GCS_MAVLINK_Parameters &parameters,
     streamRates = parameters.streamRates;
 }
 
+
+// queue a message to be sent (try_send_message does the *actual*
+// mavlink work!)
+void GCS_MAVLINK::send_message(enum ap_message id)
+{
+    if (id == MSG_HEARTBEAT) {
+        save_signing_timestamp(false);
+        // update the mask of all streaming channels
+        if (is_streaming()) {
+            GCS_MAVLINK::chan_is_streaming |= (1U<<(chan-MAVLINK_COMM_0));
+        } else {
+            GCS_MAVLINK::chan_is_streaming &= ~(1U<<(chan-MAVLINK_COMM_0));
+        }
+    }
+    pushed_ap_message_ids.set(id);
+}
+
+
+
 bool GCS_MAVLINK::init(uint8_t instance)
 {
     // search for serial port
@@ -283,6 +302,39 @@ bool GCS_MAVLINK::send_battery_status() const
     }
     return true;
 }
+
+
+void GCS_MAVLINK::send_resume_point_details_back_to_gcs(int current_wp_idx, int newMissionSize, float lat, float lng, float alt, int altFrame, bool wasSpraying)
+{
+               
+
+/* 
+    printf("this shouldn't be called\n");
+    mavlink_msg_command_long_send
+                                chan,
+                                0,
+                                0,
+                                MAV_CMD_USER_3,
+                                0,
+                                //param1
+                                (float) current_wp_idx, //resume wpt index (this would be the next wpt.)
+                                //param2
+                                (float) newMissionSize, //new total number of wpts stored onboard 
+                                //param3
+                                lat, 
+                                //param4
+                                lng,
+                                //param5
+                                alt,
+                                //param6
+                                altFrame,
+                                //param7
+                                wasSpraying ? 1 : 0);
+                                */
+
+                                
+}
+
 
 void GCS_MAVLINK::send_distance_sensor(const AP_RangeFinder_Backend *sensor, const uint8_t instance) const
 {
@@ -1348,22 +1400,9 @@ bool GCS_MAVLINK::set_ap_message_interval(enum ap_message id, uint16_t interval_
     return true;
 }
 
-// queue a message to be sent (try_send_message does the *actual*
-// mavlink work!)
-void GCS_MAVLINK::send_message(enum ap_message id)
-{
-    if (id == MSG_HEARTBEAT) {
-        save_signing_timestamp(false);
-        // update the mask of all streaming channels
-        if (is_streaming()) {
-            GCS_MAVLINK::chan_is_streaming |= (1U<<(chan-MAVLINK_COMM_0));
-        } else {
-            GCS_MAVLINK::chan_is_streaming &= ~(1U<<(chan-MAVLINK_COMM_0));
-        }
-    }
 
-    pushed_ap_message_ids.set(id);
-}
+
+
 
 void GCS_MAVLINK::packetReceived(const mavlink_status_t &status,
                                  const mavlink_message_t &msg)
@@ -1951,6 +1990,59 @@ void GCS::service_statustext(void)
     }
 }
 
+
+void GCS::service_pvresumepoint(){
+
+ // create bitmask of what mavlink ports we should send this text to.
+    // note, if sending to all ports, we only need to store the bitmask for each and the string only once.
+    // once we send over a link, clear the port but other busy ports bit may stay allowing for faster links
+    // to clear the bit and send quickly but slower links to still store the string. Regardless of mixed
+    // bitrates of ports, a maximum of _status_capacity strings can be buffered. Downside
+    // is if you have a super slow link mixed with a faster port, if there are _status_capacity
+    // strings in the slow queue then the next item can not be queued for the faster link
+
+
+  if (_pv_resumepoint_queue.empty()) 
+  {
+        // nothing to do
+        return;
+  }
+
+    //right now we harccoded max pvresumepoint capacity to 5, I don't expect to queue up any, and in fact we should
+    //probably attach some sort of ID so that the GCS can ignore repeat sends or something.
+    for (uint8_t idx=0; idx< 5; ) {
+       
+        pvresume_t *resumeMsg = _pv_resumepoint_queue[idx];
+        if (resumeMsg == nullptr) {
+            break;
+        }
+        // try and send to all active mavlink ports listed in the statustext.bitmask
+        for (uint8_t i=0; i<MAVLINK_COMM_NUM_BUFFERS; i++) {
+            uint8_t chan_bit = (1U<<i);
+            // logical AND (&) to mask them together
+            if (resumeMsg->bitmask & chan_bit) {
+                // something is queued on a port and that's the port index we're looped at
+                mavlink_channel_t chan_index = (mavlink_channel_t)(MAVLINK_COMM_0+i);
+                if (HAVE_PAYLOAD_SPACE(chan_index, MAVLINK_MSG_ID_COMMAND_LONG)) {
+                    // we have space so send then clear that channel bit on the mask
+                  
+                    //mavlink_msg_statustext_send(chan_index, resumeMsg->msg.severity, statustext->msg.text, 0, 0);
+                  mavlink_msg_command_long_send_struct(chan_index, &resumeMsg->msg);
+                  resumeMsg->bitmask &= ~chan_bit;
+                }
+            }
+        }
+
+        if (resumeMsg->bitmask == 0) {
+            _pv_resumepoint_queue.remove(idx);
+        } else {
+            // move to next index
+            idx++;
+        }
+    }
+}
+
+
 void GCS::send_message(enum ap_message id)
 {
     for (uint8_t i=0; i<num_gcs(); i++) {
@@ -1960,7 +2052,8 @@ void GCS::send_message(enum ap_message id)
 
 void GCS::update_send()
 {
-    if (!initialised_missionitemprotocol_objects) {
+    if (!initialised_missionitemprotocol_objects) 
+    {
         initialised_missionitemprotocol_objects = true;
         // once-only initialisation of MissionItemProtocol objects:
         AP_Mission *mission = AP::mission();
@@ -1976,31 +2069,56 @@ void GCS::update_send()
             _missionitemprotocol_fence = new MissionItemProtocol_Fence(*fence);
         }
     }
+
     if (_missionitemprotocol_waypoints != nullptr) {
         _missionitemprotocol_waypoints->update();
     }
+
     if (_missionitemprotocol_rally != nullptr) {
         _missionitemprotocol_rally->update();
     }
+
     if (_missionitemprotocol_fence != nullptr) {
         _missionitemprotocol_fence->update();
     }
     // round-robin the GCS_MAVLINK backend that gets to go first so
     // one backend doesn't monopolise all of the time allowed for sending
     // messages
+
+
     for (uint8_t i=first_backend_to_send; i<num_gcs(); i++) {
         chan(i)->update_send();
     }
+
     for (uint8_t i=0; i<first_backend_to_send; i++) {
         chan(i)->update_send();
     }
     first_backend_to_send++;
+
+
     if (first_backend_to_send >= num_gcs()) {
         first_backend_to_send = 0;
     }
-    WITH_SEMAPHORE(_statustext_sem);
-    service_statustext();
+
+    this->_runStatustextService();
+    this->_runResumepointService();
+
+//see above and below
+//    WITH_SEMAPHORE(_statustext_sem);
+  //  service_statustext();
+    
 }
+
+void GCS::_runStatustextService(){
+     WITH_SEMAPHORE(_statustext_sem);
+     service_statustext();
+}
+
+void GCS::_runResumepointService(){
+        WITH_SEMAPHORE(_pv_resumepoint_sem);
+     service_pvresumepoint();
+}
+
 
 void GCS::update_receive(void)
 {
@@ -2020,9 +2138,64 @@ void GCS::send_mission_item_reached_message(uint16_t mission_index)
         if(chan(i)->numReachedQueued < MAX_MISSION_ITEM_REACHED_QUEUE){
             chan(i)->numReachedQueued++;
         }
-        chan(i)->send_message(MSG_MISSION_ITEM_REACHED);
+        if(chan(i) != nullptr){
+            chan(i)->send_message(MSG_MISSION_ITEM_REACHED);
+        }
     }
 }
+
+
+void GCS::send_resume_point_details_back_to_gcs(int current_wp_idx, int newMissionSize, float lat, float lng, float alt, int altFrame, bool wasSpraying)
+{
+    printf("send resume point details back to gcss called\n");
+
+/*
+    pv_resume_point_details resumeDetails;
+    resumeDetails.current_wp_idx = current_wp_idx;
+    resumeDetails.newMissionSize = newMissionSize;
+    resumeDetails.lat = lat;
+    resumeDetails.lng = lng;
+    resumeDetails.alt = alt;
+    resumeDetails.altFrame = altFrame;
+    resumeDetails.wasSpraying = wasSpraying;
+*/
+
+pvresume_t pvresume{};
+pvresume.bitmask = (GCS_MAVLINK::active_channel_mask()  | GCS_MAVLINK::streaming_channel_mask() ); //& dest_bitmask;
+
+pvresume.msg.command = MAV_CMD_USER_3;
+pvresume.msg.confirmation = 0;
+pvresume.msg.param1 = current_wp_idx;
+pvresume.msg.param2 = newMissionSize;
+pvresume.msg.param3 = lat;
+pvresume.msg.param4 = lng;
+pvresume.msg.param5 = alt;
+pvresume.msg.param6 = altFrame;
+pvresume.msg.param7 = wasSpraying ? 1 : 0;
+
+      // filter destination ports to only allow active ports.
+    //statustext_t statustext{};
+    //statustext.bitmask = (GCS_MAVLINK::active_channel_mask()  | GCS_MAVLINK::streaming_channel_mask() ) & dest_bitmask;
+    
+    if (!pvresume.bitmask) {
+        // nowhere to send
+        return;
+    }
+
+    WITH_SEMAPHORE(_pv_resumepoint_sem);    
+    // The force push will ensure comm links do not block other comm links forever if they fail.
+    // If we push to a full buffer then we overwrite the oldest entry, effectively removing the
+    // block but not until the buffer fills up.
+    _pv_resumepoint_queue.push_force(pvresume);
+
+    // try and send immediately if possible
+    if (hal.scheduler->in_main_thread()) {
+        service_pvresumepoint();
+    }
+}
+
+
+
 
 void GCS::setup_console()
 {
@@ -3721,10 +3894,27 @@ MAV_RESULT GCS_MAVLINK::handle_command_user3(const mavlink_command_long_t &packe
 {
 
     if(copter.control_mode != Mode::Number::BRAKE){
-        copter.InsertResumePoint();
+        copter.BrakeAndInsertResumePointIfNeeded();
     }
 
+/*
+    AP_Mission* mission = AP_Mission::get_singleton();  
+    if(!mission){return MAV_RESULT_DENIED;}
 
+    int idx = mission->get_prev_nav_cmd_with_wp_index();  
+    if(idx <= 0 || idx > mission->num_commands()){
+        return MAV_RESULT_FAILED;
+    }
+  
+
+     PrecisionVision::PVResumePointCreator resumeMaker(
+                            *AP_Mission::get_singleton(),
+                             AP::ahrs(),
+                            *AC_Sprayer::get_singleton());
+                        
+    resumeMaker.CreateResumePointAtCurrentUavLocationAndState();
+//    copter.createResumePointAtCurrentLocation(packet.param3 > 0  ? 1 : 0);
+*/
 
     return MAV_RESULT_ACCEPTED;
 }
