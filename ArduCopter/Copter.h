@@ -72,7 +72,7 @@
 #include <AP_TempCalibration/AP_TempCalibration.h>
 #include <AC_AutoTune/AC_AutoTune.h>
 #include <AP_Common/AP_FWVersion.h>
-
+#include <AP_OpenDroneID/AP_OpenDroneID.h>
 
 // Configuration
 #include "defines.h"
@@ -706,9 +706,13 @@ private:
     //void TestMakeResumepoint();
 
     void BrakeAndInsertResumePointIfNeeded();
+    void InsertResumePointIfNeeded();
+
+    private:
+    void _processResumePoint(bool wasSpraying, int curnavidx); 
+
+    public:
     
-
-
     // Attitude.cpp
     float get_pilot_desired_yaw_rate(int16_t stick_angle);
     void update_throttle_hover();
@@ -770,7 +774,7 @@ private:
     void failsafe_gcs_off_event(void);
     void failsafe_terrain_check();
     void failsafe_terrain_set_status(bool data_ok);
-    void failsafe_terrain_on_event();
+    void failsafe_terrain_on_event(int tag=0);
     void gpsglitch_check();
     void set_mode_RTL_or_land_with_pause(ModeReason reason);
     void set_mode_SmartRTL_or_RTL(ModeReason reason);

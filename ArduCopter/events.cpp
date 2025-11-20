@@ -228,7 +228,7 @@ void Copter::failsafe_terrain_check()
     // check for clearing of event
     if (trigger_event != failsafe.terrain) {
         if (trigger_event) {
-            failsafe_terrain_on_event();
+            failsafe_terrain_on_event(5);
         } else {
             AP::logger().Write_Error(LogErrorSubsystem::FAILSAFE_TERRAIN, LogErrorCode::ERROR_RESOLVED);
             failsafe.terrain = false;
@@ -257,10 +257,10 @@ void Copter::failsafe_terrain_set_status(bool data_ok)
 }
 
 // terrain failsafe action
-void Copter::failsafe_terrain_on_event()
+void Copter::failsafe_terrain_on_event(int tag)
 {
     failsafe.terrain = true;
-    gcs().send_text(MAV_SEVERITY_CRITICAL,"Failsafe: Terrain data missing");
+    gcs().send_text(MAV_SEVERITY_CRITICAL, "Failsafe: Terrain data missing, tag: %d", tag);
     AP::logger().Write_Error(LogErrorSubsystem::FAILSAFE_TERRAIN, LogErrorCode::FAILSAFE_OCCURRED);
 
     if (should_disarm_on_failsafe()) {

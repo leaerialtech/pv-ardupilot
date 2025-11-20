@@ -62,3 +62,18 @@ target/
 
 # Mac stuff
 .DS_Store
+
+# Eclipse
+.settings/
+
+# IntelliJ
+.idea/
+
+# VS code
+.vscode
+
+# virtualenv
+.pyenv
+
+# history
+.history

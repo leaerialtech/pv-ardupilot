@@ -1147,6 +1147,23 @@ struct PACKED log_Proximity {
     float closest_dist;
 };
 
+struct PACKED log_Proximity_raw {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t health;
+    float raw_dist0;
+    float raw_dist45;
+    float raw_dist90;
+    float raw_dist135;
+    float raw_dist180;
+    float raw_dist225;
+    float raw_dist270;
+    float raw_dist315;
+    float distup;
+    float closest_angle;
+    float closest_dist;
+};
+
 struct PACKED log_Performance {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -1410,6 +1427,8 @@ struct PACKED log_Arm_Disarm {
       "DMS", "IIIIIBBBBBBBBB",         "TimeMS,N,Dp,RT,RS,Fa,Fmn,Fmx,Pa,Pmn,Pmx,Sa,Smn,Smx", "s-------------", "C-------------" }, \
     { LOG_BEACON_MSG, sizeof(log_Beacon), \
       "BCN", "QBBfffffff",  "TimeUS,Health,Cnt,D0,D1,D2,D3,PosX,PosY,PosZ", "s--mmmmmmm", "F--BBBBBBB" }, \
+      { LOG_RAW_PROXIMITY_MSG, sizeof(log_Proximity_raw), \
+      "PRXR", "QBfffffffffff", "TimeUS,Health,D0,D45,D90,D135,D180,D225,D270,D315,DUp,CAn,CDis", "s-mmmmmmmmmhm", "F-00000000000" }, \
     { LOG_PROXIMITY_MSG, sizeof(log_Proximity), \
       "PRX", "QBfffffffffff", "TimeUS,Health,D0,D45,D90,D135,D180,D225,D270,D315,DUp,CAn,CDis", "s-mmmmmmmmmhm", "F-00000000000" }, \
     { LOG_PERFORMANCE_MSG, sizeof(log_Performance),                     \
@@ -1784,6 +1803,7 @@ enum LogMessages : uint8_t {
     LOG_VISUALODOM_MSG,
     LOG_AOA_SSA_MSG,
     LOG_BEACON_MSG,
+    LOG_RAW_PROXIMITY_MSG,
     LOG_PROXIMITY_MSG,
     LOG_DF_FILE_STATS,
     LOG_SRTL_MSG,
@@ -1800,7 +1820,6 @@ enum LogMessages : uint8_t {
     LOG_ARM_DISARM_MSG,
     LOG_OA_BENDYRULER_MSG,
     LOG_OA_DIJKSTRA_MSG,
-
     _LOG_LAST_MSG_
 };
 

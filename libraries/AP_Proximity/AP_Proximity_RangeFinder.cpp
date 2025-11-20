@@ -47,6 +47,26 @@ void AP_Proximity_RangeFinder::update(void)
                 _distance_min = sensor->min_distance_cm() * 0.01f;
                 _distance_max = sensor->max_distance_cm() * 0.01f;
                 _distance_valid[sector] = (_distance[sector] >= _distance_min) && (_distance[sector] <= _distance_max);
+                
+            
+                const uint32_t now_ms = AP_HAL::millis();
+                const uint32_t dt = now_ms - _last_update_ms;
+                _last_update_ms = now_ms;
+                if (dt < PROXIMITY_FILT_RESET_TIME) {
+                        _filtered_distance[sector].set_cutoff_frequency(frontend.get_filter_freq());
+                        _filtered_distance[sector].apply(_distance[sector], dt* 0.001f);
+                } else {
+                    // reset filter since last distance was passed a long time back
+                    _filtered_distance[sector].reset(_distance[sector]);
+                }
+
+
+                if(_filtered_distance[sector].get() >= _distance_max){
+                    int z=3; 
+                    z++;
+                }
+
+
                 _last_update_ms = now;
                 update_boundary_for_sector(sector, true);
             }

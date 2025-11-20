@@ -109,6 +109,18 @@ void GPIO::setup_alt_config(void)
 #endif // HAL_PIN_ALT_CONFIG
 
 
+/*
+//adding to be able to set pullup/down resistors programatically. 
+void GPIO::setPalMode(uint8_t pin, uint8_t palmode)
+{
+    struct gpio_entry *g = gpio_by_pin_num(pin);
+    if (g) {
+        g->mode = palmode; 
+        palSetLineMode(g->pal_line, g->mode);
+    }
+}
+*/
+
 void GPIO::pinMode(uint8_t pin, uint8_t output)
 {
     struct gpio_entry *g = gpio_by_pin_num(pin);

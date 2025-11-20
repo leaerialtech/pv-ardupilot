@@ -275,6 +275,7 @@ bool AC_WPNav::set_wp_destination(const Vector3f& destination, bool terrain_alt)
     if (terrain_alt) {
         float origin_terr_offset;
         if (!get_terrain_offset(origin_terr_offset)) {
+            AP::logger().Write("PVWN", "TimeUS,TrCd", "QI", AP_HAL::micros64(), 555);
             return false;
         }
         origin.z -= origin_terr_offset;
@@ -322,6 +323,7 @@ bool AC_WPNav::set_wp_origin_and_destination(const Vector3f& origin, const Vecto
     float origin_terr_offset = 0.0f;
     if (terrain_alt) {
         if (!get_terrain_offset(origin_terr_offset)) {
+            AP::logger().Write("PVWN", "TimeUS,TrCd", "QI", AP_HAL::micros64(), 666);
             return false;
         }
     }
@@ -1113,6 +1115,7 @@ bool AC_WPNav::get_vector_NEU(const Location &loc, Vector3f &vec, bool &terrain_
     // convert location to NE vector2f
     Vector2f res_vec;
     if (!loc.get_vector_xy_from_origin_NE(res_vec)) {
+        AP::logger().Write("PVWN", "TimeUS,TrCd", "QI", AP_HAL::micros64(), 111);
         return false;
     }
 
@@ -1120,6 +1123,7 @@ bool AC_WPNav::get_vector_NEU(const Location &loc, Vector3f &vec, bool &terrain_
     if (loc.get_alt_frame() == Location::AltFrame::ABOVE_TERRAIN) {
         int32_t terr_alt;
         if (!loc.get_alt_cm(Location::AltFrame::ABOVE_TERRAIN, terr_alt)) {
+            AP::logger().Write("PVWN", "TimeUS,TrCd", "QI", AP_HAL::micros64(), 222);
             return false;
         }
         vec.z = terr_alt;
@@ -1128,6 +1132,7 @@ bool AC_WPNav::get_vector_NEU(const Location &loc, Vector3f &vec, bool &terrain_
         terrain_alt = false;
         int32_t temp_alt;
         if (!loc.get_alt_cm(Location::AltFrame::ABOVE_ORIGIN, temp_alt)) {
+            AP::logger().Write("PVWN", "TimeUS,TrCd", "QI", AP_HAL::micros64(), 333);
             return false;
         }
         vec.z = temp_alt;

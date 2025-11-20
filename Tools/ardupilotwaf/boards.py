@@ -3,6 +3,7 @@
 
 from collections import OrderedDict
 import sys, os
+import fnmatch
 
 import waflib
 from waflib import Utils
@@ -70,6 +71,26 @@ class Board:
         else:
             cfg.options.disable_scripting = True;
 
+        # allow enable of OpenDroneID for any board
+        if cfg.options.enable_opendroneid:
+            env.ENABLE_OPENDRONEID = True
+            env.DEFINES.update(
+                AP_OPENDRONEID_ENABLED=1,
+            )
+            cfg.msg("Enabled OpenDroneID", 'yes')
+        else:
+            cfg.msg("Enabled OpenDroneID", 'no', color='YELLOW')
+
+        # allow enable of firmware ID checking for any board
+        if cfg.options.enable_check_firmware:
+            env.CHECK_FIRMWARE_ENABLED = True
+            env.DEFINES.update(
+                AP_CHECK_FIRMWARE_ENABLED=1,
+            )
+            cfg.msg("Enabled firmware ID checking", 'yes')
+        else:
+            cfg.msg("Enabled firmware ID checking", 'no', color='YELLOW')
+            
         d = env.get_merged_dict()
         # Always prepend so that arguments passed in the command line get
         # the priority.
@@ -131,6 +152,8 @@ class Board:
             env.DEFINES.update(
                 AP_SCRIPTING_CHECKS = 1,
                 )
+
+        cfg.msg("CXX Compiler", "%s %s"  % (cfg.env.COMPILER_CXX, ".".join(cfg.env.CC_VERSION)))
 
         if 'clang' in cfg.env.COMPILER_CC:
             env.CFLAGS += [
@@ -318,6 +341,23 @@ def get_boards_names():
 
     return sorted(list(_board_classes.keys()), key=str.lower)
 
+def get_ap_periph_boards():
+    '''Add AP_Periph boards based on existance of periph keywork in hwdef.dat or board name'''
+    list_ap = [s for s in list(_board_classes.keys()) if "periph" in s]
+    dirname, dirlist, filenames = next(os.walk('libraries/AP_HAL_ChibiOS/hwdef'))
+    for d in dirlist:
+        if d in list_ap:
+            continue
+        hwdef = os.path.join(dirname, d, 'hwdef.dat')
+        if os.path.exists(hwdef):
+            with open(hwdef, "r") as f:
+                if '-periph' in f.readline():  # try to get -periph include
+                    list_ap.append(d)
+                if 'AP_PERIPH' in f.read():
+                    list_ap.append(d)
+    list_ap = list(set(list_ap))
+    return list_ap
+
 def get_removed_boards():
     '''list of boards which have been removed'''
     return sorted(['px4-v1', 'px4-v2', 'px4-v3', 'px4-v4', 'px4-v4pro'])
@@ -359,6 +399,12 @@ class sitl(Board):
             CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_NONE',
             AP_SCRIPTING_CHECKS = 1, # SITL should always do runtime scripting checks
         )
+
+        cfg.define('AP_OPENDRONEID_ENABLED', 1)
+
+        if self.with_uavcan:
+            cfg.define('HAL_NUM_CAN_IFACES', 2)
+            cfg.define('UAVCAN_EXCEPTIONS', 0)
 
         env.CXXFLAGS += [
             '-Werror=float-equal'

@@ -310,7 +310,7 @@ struct port_intctx {
 #define port_switch(ntp, otp) {                                             \
   struct port_intctx *r13 = (struct port_intctx *)__get_PSP();              \
   if ((stkalign_t *)(r13 - 1) < (otp)->wabase) {                            \
-	CH_CFG_STACK_OVERFLOW_HOOK(otp);										\
+    chSysHalt("stack overflow");                                            \
   }                                                                         \
   _port_switch(ntp, otp);                                                   \
 }

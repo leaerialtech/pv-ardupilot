@@ -47,6 +47,7 @@ public:
         RPLidarA2 = 5,
         TRTOWEREVO = 6,
         SF40C = 7,
+        SF45B = 8,
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         SITL    = 10,
         MorseSITL = 11,
@@ -75,6 +76,7 @@ public:
     // return sensor orientation and yaw correction
     uint8_t get_orientation(uint8_t instance) const;
     int16_t get_yaw_correction(uint8_t instance) const;
+    float get_filter_freq() const { return _filt_freq; }
 
     // return sensor health
     Status get_status(uint8_t instance) const;
@@ -87,6 +89,7 @@ public:
 
     // get distances in PROXIMITY_MAX_DIRECTION directions. used for sending distances to ground station
     bool get_horizontal_distances(Proximity_Distance_Array &prx_dist_array) const;
+    bool get_horizontal_filtered_distances(Proximity_Distance_Array &prx_dist_array) const;
 
     // get boundary points around vehicle for use by avoidance
     //   returns nullptr and sets num_points to zero if no boundary can be returned
@@ -135,6 +138,9 @@ public:
     bool sensor_enabled() const;
     bool sensor_failed() const;
 
+ // true if raw distances should be logged
+    bool get_raw_log_enable() const { return _raw_log_enable; }
+
 private:
     static AP_Proximity *_singleton;
     Proximity_State state[PROXIMITY_MAX_INSTANCES];
@@ -155,6 +161,10 @@ private:
     AP_Int16 _yaw_correction[PROXIMITY_MAX_INSTANCES];
     AP_Int16 _ignore_angle_deg[PROXIMITY_MAX_IGNORE];   // angle (in degrees) of area that should be ignored by sensor (i.e. leg shows up)
     AP_Int8 _ignore_width_deg[PROXIMITY_MAX_IGNORE];    // width of beam (in degrees) that should be ignored
+
+    AP_Int8 _raw_log_enable;                            // enable logging raw distances
+    AP_Int8 _ign_gnd_enable;                           // true if land detection should be enabled
+    AP_Float _filt_freq;    
 
     void detect_instance(uint8_t instance);
 };

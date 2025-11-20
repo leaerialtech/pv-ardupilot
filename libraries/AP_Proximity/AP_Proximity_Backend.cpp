@@ -20,6 +20,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Proximity.h"
 #include "AP_Proximity_Backend.h"
+#include <AP_Math/AP_Math.h>  
 
 /*
   base class constructor. 
@@ -29,8 +30,12 @@ AP_Proximity_Backend::AP_Proximity_Backend(AP_Proximity &_frontend, AP_Proximity
         frontend(_frontend),
         state(_state)
 {
+    for(int i=0; i < PROXIMITY_NUM_SECTORS; i++){_last_update_ms[i]=0;}
+
     // initialise sector edge vector used for building the boundary fence
     init_boundary();
+
+
 }
 
 // get distance and angle to closest object (used for pre-arm check)
@@ -43,7 +48,7 @@ bool AP_Proximity_Backend::get_closest_object(float& angle_deg, float &distance)
     // check all sectors for shorter distance
     for (uint8_t i=0; i<PROXIMITY_NUM_SECTORS; i++) {
         if (_distance_valid[i]) {
-            if (!sector_found || (_distance[i] < _distance[sector])) {
+            if (!sector_found || (_filtered_distance[i].get() < _filtered_distance[sector].get())) {
                 sector = i;
                 sector_found = true;
             }
@@ -52,10 +57,11 @@ bool AP_Proximity_Backend::get_closest_object(float& angle_deg, float &distance)
 
     if (sector_found) {
         angle_deg = _angle[sector];
-        distance = _distance[sector];
+        distance = _filtered_distance[sector].get();
     }
     return sector_found;
 }
+
 
 // get number of objects, used for non-GPS avoidance
 uint8_t AP_Proximity_Backend::get_object_count() const
@@ -69,7 +75,7 @@ bool AP_Proximity_Backend::get_object_angle_and_distance(uint8_t object_number, 
 {
     if (object_number < PROXIMITY_NUM_SECTORS && _distance_valid[object_number]) {
         angle_deg = _angle[object_number];
-        distance = _distance[object_number];
+        distance = _filtered_distance[object_number].get();
         return true;
     }
     return false;
@@ -98,16 +104,31 @@ bool AP_Proximity_Backend::get_horizontal_distances(AP_Proximity::Proximity_Dist
         prx_dist_array.orientation[i] = i;
         prx_dist_array.distance[i] = distance_max();
     }
+	
+
+
 
     // cycle through all sectors filling in distances
     for (uint8_t i=0; i<PROXIMITY_NUM_SECTORS; i++) {
         if (_distance_valid[i]) {
-            // convert angle to orientation
-            int16_t orientation = static_cast<int16_t>(_angle[i] * (PROXIMITY_MAX_DIRECTION / 360.0f));
+
+        
+           /* 
+            float angleChk = _angle[i];
+            float denom = (PROXIMITY_MAX_DIRECTION / 360.0f);
+            int16_t orientation = static_cast<int16_t>(angleChk * denom);
+        
             if ((orientation >= 0) && (orientation < PROXIMITY_MAX_DIRECTION) && (_distance[i] < prx_dist_array.distance[orientation])) {
                 prx_dist_array.distance[orientation] = _distance[i];
                 dist_set[orientation] = true;
             }
+            */
+
+            if(_distance[i] < prx_dist_array.distance[i]){
+                prx_dist_array.distance[i] = _distance[i];
+                dist_set[i] = true;
+            }
+            
         }
     }
 
@@ -123,6 +144,55 @@ bool AP_Proximity_Backend::get_horizontal_distances(AP_Proximity::Proximity_Dist
     }
     return true;
 }
+
+
+bool AP_Proximity_Backend::get_horizontal_filtered_distances(AP_Proximity::Proximity_Distance_Array &prx_dist_array) const
+{
+    // exit immediately if we have no good ranges
+    bool valid_distances = false;
+    for (uint8_t i=0; i<PROXIMITY_NUM_SECTORS; i++) {
+        if (_distance_valid[i]) {
+            valid_distances = true;
+            break;
+        }
+    }
+    if (!valid_distances) {
+        return false;
+    }
+
+    // initialise orientations and directions
+    //  see MAV_SENSOR_ORIENTATION for orientations (0 = forward, 1 = 45 degree clockwise from north, etc)
+    //  distances initialised to maximum distances
+    bool dist_set[PROXIMITY_MAX_DIRECTION]{};
+    for (uint8_t i=0; i<PROXIMITY_MAX_DIRECTION; i++) {
+        prx_dist_array.orientation[i] = i;
+        prx_dist_array.distance[i] = distance_max();
+    }
+
+    // cycle through all sectors filling in distances
+    for (uint8_t i=0; i<PROXIMITY_NUM_SECTORS; i++) {
+        if (_distance_valid[i]) {
+            if(_distance[i] < prx_dist_array.distance[i]){
+                prx_dist_array.distance[i] = _filtered_distance[i].get();
+                dist_set[i] = true;
+            }
+            
+        }
+    }
+
+    // fill in missing orientations with average of adjacent orientations if necessary and possible
+    for (uint8_t i=0; i<PROXIMITY_MAX_DIRECTION; i++) {
+        if (!dist_set[i]) {
+            uint8_t orient_before = (i==0) ? (PROXIMITY_MAX_DIRECTION - 1) : (i-1);
+            uint8_t orient_after = (i==(PROXIMITY_MAX_DIRECTION - 1)) ? 0 : (i+1);
+            if (dist_set[orient_before] && dist_set[orient_after]) {
+                prx_dist_array.distance[i] = (prx_dist_array.distance[orient_before] + prx_dist_array.distance[orient_after]) / 2.0f;
+            }
+        }
+    }
+    return true;
+}
+
 
 // get boundary points around vehicle for use by avoidance
 //   returns nullptr and sets num_points to zero if no boundary can be returned
@@ -175,7 +245,7 @@ void AP_Proximity_Backend::update_boundary_for_sector(const uint8_t sector, cons
     }
 
     if (push_to_OA_DB) {
-        database_push(_angle[sector], _distance[sector]);
+        database_push(_angle[sector], _filtered_distance[sector].get());
     }
 
     // find adjacent sector (clockwise)
@@ -184,14 +254,16 @@ void AP_Proximity_Backend::update_boundary_for_sector(const uint8_t sector, cons
         next_sector = 0;
     }
 
+    //PRECISION VISION - retrofit our filtered distance in here rather than the raw distances
+
     // boundary point lies on the line between the two sectors at the shorter distance found in the two sectors
     float shortest_distance = PROXIMITY_BOUNDARY_DIST_DEFAULT;
     if (_distance_valid[sector] && _distance_valid[next_sector]) {
-        shortest_distance = MIN(_distance[sector], _distance[next_sector]);
+        shortest_distance = MIN(_filtered_distance[sector].get(), _filtered_distance[next_sector].get());
     } else if (_distance_valid[sector]) {
-        shortest_distance = _distance[sector];
+        shortest_distance = _filtered_distance[sector].get();
     } else if (_distance_valid[next_sector]) {
-        shortest_distance = _distance[next_sector];
+        shortest_distance = _filtered_distance[next_sector].get();
     }
     if (shortest_distance < PROXIMITY_BOUNDARY_DIST_MIN) {
         shortest_distance = PROXIMITY_BOUNDARY_DIST_MIN;
@@ -207,11 +279,11 @@ void AP_Proximity_Backend::update_boundary_for_sector(const uint8_t sector, cons
     uint8_t prev_sector = (sector == 0) ? PROXIMITY_NUM_SECTORS-1 : sector-1;
     shortest_distance = PROXIMITY_BOUNDARY_DIST_DEFAULT;
     if (_distance_valid[prev_sector] && _distance_valid[sector]) {
-        shortest_distance = MIN(_distance[prev_sector], _distance[sector]);
+        shortest_distance = MIN(_filtered_distance[prev_sector].get(), _filtered_distance[sector].get());
     } else if (_distance_valid[prev_sector]) {
-        shortest_distance = _distance[prev_sector];
+        shortest_distance = _filtered_distance[prev_sector].get();
     } else if (_distance_valid[sector]) {
-        shortest_distance = _distance[sector];
+        shortest_distance = _filtered_distance[sector].get();
     }
     _boundary_point[prev_sector] = _sector_edge_vector[prev_sector] * shortest_distance;
 
@@ -284,4 +356,14 @@ void AP_Proximity_Backend::database_push(float angle, float distance, uint32_t t
     Vector2f temp_pos = current_pos;
     temp_pos.offset_bearing(wrap_180(current_heading + angle), distance);
     oaDb->queue_push(temp_pos, timestamp_ms, distance);
+}
+
+
+
+
+// correct an angle (in degrees) based on the orientation and yaw correction parameters
+float AP_Proximity_Backend::correct_angle_for_orientation(float angle_degrees) const
+{
+    const float angle_sign = (frontend.get_orientation(state.instance) == 1) ? -1.0f : 1.0f;
+    return wrap_360(angle_degrees * angle_sign + frontend.get_yaw_correction(state.instance));
 }

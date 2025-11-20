@@ -19,8 +19,10 @@
 
 
 #include <AP_HAL/AP_HAL.h>
-#include "GCS.h"
+#include <AP_Logger/AP_Logger.h>
+#include <GCS_MAVLink/GCS.h> // for LOG_ENTRY
 #include <AP_GPS/AP_GPS.h>
+
 
 extern const AP_HAL::HAL& hal;
 

@@ -13,3 +13,29 @@ SERIAL5_PROTOCOL 1
 # lower heater gains
 BRD_IMUHEAT_I 0.07
 BRD_IMUHEAT_P 50
+
+
+
+
+# enforce OpenDroneID on DroneCAN. Note that we need to lock down key parameters
+# to ensure the integrity of the RemoteID system
+
+#DID_ENABLE 1 @READONLY
+#DID_OPTIONS 1 @READONLY
+#DID_MAVPORT -1 @READONLY
+#DID_CANDRIVER 2 @READONLY
+#AHRS_EKF_TYPE 2 @READONLY
+
+
+#allow these to be changed for this first release, subsequent releases should have readonly enabled. 
+#NOTE: defaulting DID enable to off so that we can push the same version to customers without modules currently installed 
+DID_ENABLE 0 
+DID_OPTIONS 1 
+DID_MAVPORT -1 
+DID_CANDRIVER 2 
+AHRS_EKF_TYPE 2 
+
+
+
+GPS_TYPE 1
+GPS_TYPE2 0

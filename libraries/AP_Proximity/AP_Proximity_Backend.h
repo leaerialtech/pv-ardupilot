@@ -18,11 +18,15 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Proximity.h"
 #include <AP_Common/Location.h>
+#include <Filter/LowPassFilter.h>
+
 
 #define PROXIMITY_NUM_SECTORS           8       // number of sectors
 #define PROXIMITY_SECTOR_WIDTH_DEG      45.0f   // width of sectors in degrees
 #define PROXIMITY_BOUNDARY_DIST_MIN 0.6f    // minimum distance for a boundary point.  This ensures the object avoidance code doesn't think we are outside the boundary.
 #define PROXIMITY_BOUNDARY_DIST_DEFAULT 100 // if we have no data for a sector, boundary is placed 100m out
+#define PROXIMITY_BOUNDARY_3D_TIMEOUT_MS 1000 // we should check the 3D boundary faces after every this many ms
+#define PROXIMITY_FILT_RESET_TIME     1000    // reset filter if last distance was pushed more than this many ms away
 
 class AP_Proximity_Backend
 {
@@ -36,6 +40,7 @@ public:
 
     // update the state structure
     virtual void update() = 0;
+
 
     // get maximum and minimum distances (in meters) of sensor
     virtual float distance_max() const = 0;
@@ -61,14 +66,18 @@ public:
 
     // get distances in 8 directions. used for sending distances to ground station
     bool get_horizontal_distances(AP_Proximity::Proximity_Distance_Array &prx_dist_array) const;
+    bool get_horizontal_filtered_distances(AP_Proximity::Proximity_Distance_Array &prx_dist_array) const;
 
 protected:
+     uint32_t _last_timeout_check_ms;  // time when boundary was checked for non-updated valid faces
 
     // set status and update valid_count
     void set_status(AP_Proximity::Status status);
 
     // find which sector a given angle falls into
     uint8_t convert_angle_to_sector(float angle_degrees) const;
+        // find which sector a given angle falls into
+    bool convert_angle_to_sector(float angle_degrees, uint8_t &sector) const;
 
     // initialise the boundary and sector_edge_vector array used for object avoidance
     //   should be called if the sector_middle_deg or _setor_width_deg arrays are changed
@@ -78,7 +87,9 @@ protected:
     //   the boundary points lie on the line between sectors meaning two boundary points may be updated based on a single sector's distance changing
     //   the boundary point is set to the shortest distance found in the two adjacent sectors, this is a conservative boundary around the vehicle
     void update_boundary_for_sector(const uint8_t sector, const bool push_to_OA_DB);
-
+  
+    float correct_angle_for_orientation(float angle_degrees) const;
+ 
     // check if a reading should be ignored because it falls into an ignore area
     // angles should be in degrees and in the range of 0 to 360
     bool ignore_reading(uint16_t angle_deg) const;
@@ -98,8 +109,11 @@ protected:
     float _angle[PROXIMITY_NUM_SECTORS];            // angle to closest object within each sector
     float _distance[PROXIMITY_NUM_SECTORS];         // distance to closest object within each sector
     bool _distance_valid[PROXIMITY_NUM_SECTORS];    // true if a valid distance received for each sector
+    LowPassFilterFloat _filtered_distance[PROXIMITY_NUM_SECTORS]; // low pass filter version of our raw data, retrofit into PrecisionVision 
+    uint32_t _last_update_ms[PROXIMITY_NUM_SECTORS]; // time when distance was last updated
 
     // fence boundary
     Vector2f _sector_edge_vector[PROXIMITY_NUM_SECTORS];    // vector for right-edge of each sector, used to speed up calculation of boundary
     Vector2f _boundary_point[PROXIMITY_NUM_SECTORS];        // bounding polygon around the vehicle calculated conservatively for object avoidance
+
 };

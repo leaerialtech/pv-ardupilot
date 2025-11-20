@@ -21,6 +21,7 @@
 #include "AP_Proximity_RangeFinder.h"
 #include "AP_Proximity_MAV.h"
 #include "AP_Proximity_LightWareSF40C.h"
+#include "AP_Proximity_LightWareSF45B.h"
 #include "AP_Proximity_SITL.h"
 #include "AP_Proximity_MorseSITL.h"
 #include "AP_Proximity_AirSimSITL.h"
@@ -176,6 +177,24 @@ const AP_Param::GroupInfo AP_Proximity::var_info[] = {
     AP_GROUPINFO("2_YAW_CORR", 18, AP_Proximity, _yaw_correction[1], 0),
 #endif
 
+
+// @Param: _LOG_RAW
+    // @DisplayName: Proximity raw distances log
+    // @Description: Set this parameter to one if logging unfiltered(raw) distances from sensor should be enabled
+    // @Values: 0:Off, 1:On
+    // @User: Advanced
+    AP_GROUPINFO("_LOG_RAW", 17, AP_Proximity, _raw_log_enable, 0),
+
+    // @Param: _FILT
+    // @DisplayName: Proximity filter cutoff frequency
+    // @Description: Cutoff frequency for low pass filter applied to each face in the proximity boundary
+    // @Units: Hz
+    // @Range: 0 20
+    // @User: Advanced
+    AP_GROUPINFO("_FILT", 18, AP_Proximity, _filt_freq, 0.25f),
+
+
+
     AP_GROUPEND
 };
 
@@ -328,6 +347,13 @@ void AP_Proximity::detect_instance(uint8_t instance)
         }
         break;
 
+    case Type::SF45B:
+    if(AP_Proximity_LightWareSF45B::detect()){
+          state[instance].instance = instance;
+            drivers[instance] = new AP_Proximity_LightWareSF45B(*this, state[instance]);
+            return;
+    }
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     case Type::SITL:
         state[instance].instance = instance;
@@ -355,6 +381,16 @@ bool AP_Proximity::get_horizontal_distances(Proximity_Distance_Array &prx_dist_a
     }
     // get distances from backend
     return drivers[primary_instance]->get_horizontal_distances(prx_dist_array);
+}
+
+bool AP_Proximity::get_horizontal_filtered_distances(Proximity_Distance_Array &prx_dist_array) const
+{
+ if(!valid_instance(primary_instance)) {
+        return false;
+    }
+    // get distances from backend
+    return drivers[primary_instance]->get_horizontal_filtered_distances(prx_dist_array);
+
 }
 
 // get boundary points around vehicle for use by avoidance

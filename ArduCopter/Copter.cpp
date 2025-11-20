@@ -218,6 +218,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #if OSD_ENABLED == ENABLED
     SCHED_TASK(publish_osd_info, 1, 10),
 #endif
+#if AP_OPENDRONEID_ENABLED
+    SCHED_TASK_CLASS(AP_OpenDroneID, &copter.g2.opendroneid,  update,                   10,  50),
+#endif
 };
 
 constexpr int8_t Copter::_failsafe_priorities[7];
@@ -651,8 +654,6 @@ void Copter::update_tank_sensor()
 
 void Copter::BrakeAndInsertResumePointIfNeeded()
 {
-    hal.console->printf("BrakeAndInsertResumePointIfNeeded\n"); 
-    printf("BrakeAndInsertResumePointIfNeeded\n");
     bool wasSpraying = copter.sprayer.spraying();
 
     int curnavidx = -1;
@@ -660,7 +661,25 @@ void Copter::BrakeAndInsertResumePointIfNeeded()
         curnavidx = copter.mode_auto.mission.get_prev_nav_cmd_with_wp_index();
     }
 
+    //we need to get the details above before exiting brake mode (Which owuld turn sprayer off)
     set_mode(Mode::Number::BRAKE, ModeReason::FAILSAFE);
+    this->_processResumePoint(wasSpraying,  curnavidx); 
+}
+
+void Copter::InsertResumePointIfNeeded()
+{
+    bool wasSpraying = copter.sprayer.spraying();
+    int curnavidx = -1;
+    if(copter.control_mode == Mode::Number::AUTO){
+        curnavidx = copter.mode_auto.mission.get_prev_nav_cmd_with_wp_index();
+    }
+    //just like method above, but with no mode change. 
+    this->_processResumePoint(wasSpraying,curnavidx);
+}
+
+void Copter::_processResumePoint(bool wasSpraying, int curnavidx)
+{
+
     if(!copter.wp_nav->reached_prev_wpt())
     {
         //if we haven't reached a waypoint already, we don't do any inserts. 
@@ -676,7 +695,6 @@ void Copter::BrakeAndInsertResumePointIfNeeded()
           hal.console->printf("still in takeoff waypoint command range, skipping resume");
           return;
         }
-
     }
     
     int current_wp_idx = copter.mode_auto.mission.get_current_nav_index();
@@ -894,8 +912,6 @@ Copter::Copter(void)
     sensor_health.compass = true;
     
     _tank_sensor_status = TankSensorState::SENSOR_UNAVAILABLE; 
-
-//    _pvResumeWaypointCreator = new PVResumePointCreator()
 
 }
 

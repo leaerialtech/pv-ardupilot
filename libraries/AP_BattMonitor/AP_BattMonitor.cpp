@@ -1,3 +1,5 @@
+//Modified by LEAT for PrecisionVision 2023-1-06
+
 #include "AP_BattMonitor.h"
 #include "AP_BattMonitor_Analog.h"
 #include "AP_BattMonitor_SMBus.h"
@@ -8,6 +10,7 @@
 #include "AP_BattMonitor_Sum.h"
 #include "AP_BattMonitor_FuelFlow.h"
 #include "AP_BattMonitor_FuelLevel_PWM.h"
+
 
 #include <AP_HAL/AP_HAL.h>
 
@@ -20,6 +23,11 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Notify/AP_Notify.h>
 
+//this OK since we only using copter code for PV.
+//Refactor later
+#include "../../ArduCopter/Copter.h"
+
+extern Copter copter;
 extern const AP_HAL::HAL& hal;
 
 AP_BattMonitor *AP_BattMonitor::_singleton;
@@ -389,6 +397,12 @@ void AP_BattMonitor::check_failsafes(void)
 
             gcs().send_text(MAV_SEVERITY_WARNING, "Battery %d is %s %.2fV used %.0f mAh", i + 1, type_str,
                             (double)voltage(i), (double)state[i].consumed_mah);
+
+            //PrecisionVision:
+            if(_has_triggered_failsafe == false){
+                copter.InsertResumePointIfNeeded();
+            }
+
             _has_triggered_failsafe = true;
             AP_Notify::flags.failsafe_battery = true;
             state[i].failsafe = type;

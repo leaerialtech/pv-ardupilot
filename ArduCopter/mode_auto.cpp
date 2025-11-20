@@ -180,8 +180,10 @@ void ModeAuto::takeoff_start(const Location& dest_loc)
 
     // set waypoint controller target
     if (!wp_nav->set_wp_destination(dest)) {
+        
+        AP::logger().Write_Error(LogErrorSubsystem::NAVIGATION, LogErrorCode::FAILED_TO_SET_DESTINATION);
         // failure to set destination can only be because of missing terrain data
-        copter.failsafe_terrain_on_event();
+        copter.failsafe_terrain_on_event(1);
         return;
     }
 
@@ -219,8 +221,9 @@ void ModeAuto::wp_start(const Location& dest_loc)
 
     // send target to waypoint controller
     if (!wp_nav->set_wp_destination(dest_loc)) {
+         AP::logger().Write_Error(LogErrorSubsystem::NAVIGATION, LogErrorCode::FAILED_TO_SET_DESTINATION);
         // failure to set destination can only be because of missing terrain data
-        copter.failsafe_terrain_on_event();
+        copter.failsafe_terrain_on_event(2);
         return;
     }
 
@@ -301,7 +304,7 @@ void ModeAuto::circle_movetoedge_start(const Location &circle_center, float radi
         // initialise wpnav to move to edge of circle
         if (!wp_nav->set_wp_destination(circle_edge)) {
             // failure to set destination can only be because of missing terrain data
-            copter.failsafe_terrain_on_event();
+            copter.failsafe_terrain_on_event(3);
         }
 
         // if we are outside the circle, point at the edge, otherwise hold yaw
@@ -347,7 +350,7 @@ void ModeAuto::spline_start(const Location& destination, bool stopped_at_start,
     // initialise wpnav
     if (!wp_nav->set_spline_destination(destination, stopped_at_start, seg_end_type, next_destination)) {
         // failure to set destination can only be because of missing terrain data
-        copter.failsafe_terrain_on_event();
+        copter.failsafe_terrain_on_event(4);
         return;
     }
 

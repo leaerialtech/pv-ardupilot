@@ -347,6 +347,8 @@ void AP_Proximity_LightWareSF40C::process_message()
             const uint16_t idx = 14 + (i * 2);
             const int16_t dist_cm = (int16_t)buff_to_uint16(_msg.payload[idx], _msg.payload[idx+1]);
             const float angle_deg = wrap_360((point_start_index + i) * angle_inc_deg * angle_sign + angle_correction);
+          
+          
             const uint8_t sector = convert_angle_to_sector(angle_deg);
 
             // if we've entered a new sector then finish off previous sector
@@ -362,10 +364,10 @@ void AP_Proximity_LightWareSF40C::process_message()
             }
 
             // check reading is not within an ignore zone
+            const float dist_m = dist_cm * 0.01f;
             if (!ignore_reading(angle_deg)) {
                 // check distance reading is valid
                 if ((dist_cm >= dist_min_cm) && (dist_cm <= dist_max_cm)) {
-                    const float dist_m = dist_cm * 0.01f;
 
                     // update shortest distance for this sector
                     if (dist_m < _distance[sector]) {
