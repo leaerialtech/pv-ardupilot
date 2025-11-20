@@ -94,6 +94,13 @@ AP_Int16 _spray_motor_pwm_range_min; //SPRAY_MOTOR_PWM_RANGE_MIN;
 AP_Int16 _spray_motor_pwm_range_max; //SPRAY_MOTOR_PWM_RANGE_MAX;
 AP_Int16 _spray_motor_pwm_desired; //SPRAY_MOTOR_PWM_DESIRED;
                 
+
+//SAME AS ABOVE BUT FOR SECOND PUMP (e.g. used in Aduliticiding sorties)
+AP_Int16 _spray_motor_pwm_default2; 
+AP_Int16 _spray_motor_pwm_range_min2; 
+AP_Int16 _spray_motor_pwm_range_max2; 
+AP_Int16 _spray_motor_pwm_desired2; 
+
 AP_Int16 _spray_door_pwm_default; //SPRAY_DOOR_PWM_DEFAULT;
 AP_Int16 _spray_door_pwm_range_min; //SPRAY_DOOR_PWM_RANGE_MIN;
 AP_Int16 _spray_door_pwm_range_max; //SPRAY_DOOR_PWM_RANGE_MAX;

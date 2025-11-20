@@ -66,8 +66,8 @@ public:
         k_rudder                = 21,            ///< secondary rudder channel
         k_sprayer_pump          = 22,            ///< crop sprayer pump channel
         k_sprayer_spinner       = 23,            ///< crop sprayer spinner channel
-        k_flaperon_left         = 24,            ///< flaperon, left wing
-        k_flaperon_right        = 25,            ///< flaperon, right wing
+        k_sprayer_pump2         = 24,            ///< additional (e.g. right side pump)
+        k_reuseme               = 25,            ///< flaperon, right wing
         k_steering              = 26,            ///< ground steering, used to separate from rudder
         k_parachute_release     = 27,            ///< parachute release
         k_gripper               = 28,            ///< gripper

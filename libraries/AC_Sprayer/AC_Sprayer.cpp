@@ -93,6 +93,11 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
 
     AP_GROUPINFO("HD_INT", 14, AC_Sprayer, _heading_interval, 15),
 
+    AP_GROUPINFO("MTR2_DEF", 15, AC_Sprayer, _spray_motor_pwm_default2, 1),
+    AP_GROUPINFO("MTR2_MIN", 16, AC_Sprayer, _spray_motor_pwm_range_min2, 0),
+    AP_GROUPINFO("MTR2_MAX", 17, AC_Sprayer, _spray_motor_pwm_range_max2, 0),
+    AP_GROUPINFO("MTR2_DES", 18, AC_Sprayer, _spray_motor_pwm_desired2, 0),
+
 
 
     AP_GROUPEND
@@ -165,8 +170,20 @@ void AC_Sprayer::stop_spraying()
    // }
    
      SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_default);
-     SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_default);
+
+     
+     if(_config == 2)
+     {
+
+        SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_default);    
+     }else if(_config == 3){
+
+
+        SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_motor_pwm_default2);
+     }
     
+
+
 
 //not sure what this is about
 
@@ -321,8 +338,15 @@ void AC_Sprayer::update()
 
     //  }else{
 
+
         SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_desired);
-        SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_desired);
+
+        if(_config == 2){
+            SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_desired);
+        }else if (_config == 3){
+
+            SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_motor_pwm_desired2);
+       }     
      // }
 
         _flags.spraying = true;

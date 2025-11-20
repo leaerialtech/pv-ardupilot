@@ -116,8 +116,8 @@ void SRV_Channel::aux_servo_function_setup(void)
     case k_dspoilerRight2:
     case k_rudder:
     case k_steering:
-    case k_flaperon_left:
-    case k_flaperon_right:
+    //case k_flaperon_left:
+    //case k_flaperon_right:
     case k_tiltMotorLeft:
     case k_tiltMotorRight:
     case k_elevon_left:

@@ -1656,12 +1656,5 @@
       <field type="uint16_t[4]" name="rpm" units="rpm">RPM (eRPM).</field>
       <field type="uint16_t[4]" name="count">count of telemetry packets received (wraps at 65535).</field>
     </message>
-
-<message id="11033" name="PV_SPRAY_SYSTEM_STATUS">
-      <description>Describes the state of the onboard spray system (PrecisionVision)</description>
-      <field type="uint32_t" name="time_boot_ms" units="ms">Timestamp (time since system boot).</field>
-      <field type="uint8_t" name="spraying">Positive indicates unit is spraying</field>
-    </message>
-
   </messages>
 </mavlink>

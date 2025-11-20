@@ -12,19 +12,19 @@
 //Version Number  PrecisionVision Version Num
 //#include "ap_version.h"
 
-#define THISFIRMWARE "PrecisionVision V2.1.0"
+#define THISFIRMWARE "PrecisionVision V2.2.0"
 //i think this can only be 8 chars
  
 //7 charh hash string
-#define PVHASHSTR "PV2.1.0"
+#define PVHASHSTR "PV2.2.0"
 
 // the following line is parsed by the autotest scripts
 
 //FIRMWARE_VERSION_TYPE_OFFICIAL  FIRMWARE_VERSION_TYPE_DEV
 
-#define FIRMWARE_VERSION 2,1,0,FIRMWARE_VERSION_TYPE_OFFICIAL   
+#define FIRMWARE_VERSION 2,2,0,FIRMWARE_VERSION_TYPE_OFFICIAL   
 #define FW_MAJOR 2
-#define FW_MINOR 1
+#define FW_MINOR 2
 #define FW_PATCH 0
 #define FW_TYPE FIRMWARE_VERSION_TYPE_OFFICIAL
 

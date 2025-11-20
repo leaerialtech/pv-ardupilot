@@ -1,6 +1,9 @@
+//MODIFIED BY LEAERIALTECH
+
 #include "MissionItemProtocol.h"
 
 #include "GCS.h"
+#include "../ArduCopter/Copter.h"
 
 void MissionItemProtocol::init_send_requests(GCS_MAVLINK &_link,
                                              const mavlink_message_t &msg,
@@ -25,6 +28,13 @@ void MissionItemProtocol::init_send_requests(GCS_MAVLINK &_link,
 void MissionItemProtocol::handle_mission_clear_all(const GCS_MAVLINK &_link,
                                                    const mavlink_message_t &msg)
 {
+    //PRECISIONVISION EDIT
+    //if we are in auto mode, get out of it now to avoid weird bug where clearing while running comes back fail
+    //but the GCS clears its end.  I think its a safe bet to assume if someone does a clear we need to get out of
+    //auto anyway. 
+    if(copter.control_mode == Mode::Number::AUTO){
+        copter.set_mode(Mode::Number::BRAKE, ModeReason::MISSION_END);
+    }
     bool success = true;
     success = success && !receiving;
     success = success && clear_all_items();
