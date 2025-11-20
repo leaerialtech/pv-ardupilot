@@ -11,7 +11,7 @@ from waflib.TaskGen import after_method, feature
 
 @conf
 def find_ifort(conf):
-	fc = conf.find_program('ifort', var='FC')
+	fc = conf.find_program(['ifx', 'ifort'], var='FC')
 	conf.get_ifort_version(fc)
 	conf.env.FC_NAME = 'IFORT'
 
@@ -107,7 +107,7 @@ def gather_ifort_versions(conf, versions):
 	"""
 	List compiler versions by looking up registry keys
 	"""
-	version_pattern = re.compile('^...?.?\....?.?')
+	version_pattern = re.compile(r'^...?.?\....?.?')
 	try:
 		all_versions = Utils.winreg.OpenKey(Utils.winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\Wow6432node\\Intel\\Compilers\\Fortran')
 	except OSError:

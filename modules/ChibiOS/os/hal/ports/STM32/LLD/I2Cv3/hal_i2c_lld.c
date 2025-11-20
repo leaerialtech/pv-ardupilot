@@ -50,7 +50,7 @@
 
 #if 0
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -112,8 +112,9 @@ I2CDriver I2CD4;
 #if STM32_I2C_USE_DMA == TRUE
 static inline void i2c_lld_start_rx_dma(I2CDriver *i2cp) {
 
+#if STM32_I2C4_USE_BDMA == TRUE
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -123,6 +124,7 @@ static inline void i2c_lld_start_rx_dma(I2CDriver *i2cp) {
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
   else
 #endif
+#endif /* STM32_I2C4_USE_BDMA == TRUE */
 #if defined(STM32_I2C_DMA_REQUIRED)
   {
     dmaStreamEnable(i2cp->rx.dma);
@@ -132,8 +134,9 @@ static inline void i2c_lld_start_rx_dma(I2CDriver *i2cp) {
 
 static inline void i2c_lld_start_tx_dma(I2CDriver *i2cp) {
 
+#if STM32_I2C4_USE_BDMA == TRUE
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -143,6 +146,7 @@ static inline void i2c_lld_start_tx_dma(I2CDriver *i2cp) {
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
   else
 #endif
+#endif /* STM32_I2C4_USE_BDMA == TRUE */
 #if defined(STM32_I2C_DMA_REQUIRED)
   {
     dmaStreamEnable(i2cp->tx.dma);
@@ -152,8 +156,9 @@ static inline void i2c_lld_start_tx_dma(I2CDriver *i2cp) {
 
 static inline void i2c_lld_stop_rx_dma(I2CDriver *i2cp) {
 
+#if STM32_I2C4_USE_BDMA == TRUE
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -164,6 +169,7 @@ static inline void i2c_lld_stop_rx_dma(I2CDriver *i2cp) {
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
   else
 #endif
+#endif /* STM32_I2C4_USE_BDMA == TRUE */
 #if defined(STM32_I2C_DMA_REQUIRED)
   {
     if (i2cp->rx.dma)
@@ -174,8 +180,9 @@ static inline void i2c_lld_stop_rx_dma(I2CDriver *i2cp) {
 
 static inline void i2c_lld_stop_tx_dma(I2CDriver *i2cp) {
 
+#if STM32_I2C4_USE_BDMA == TRUE
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -186,6 +193,7 @@ static inline void i2c_lld_stop_tx_dma(I2CDriver *i2cp) {
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
   else
 #endif
+#endif /* STM32_I2C4_USE_BDMA == TRUE */
 #if defined(STM32_I2C_DMA_REQUIRED)
   {
     if (i2cp->tx.dma)
@@ -471,7 +479,7 @@ static void i2c_lld_serve_error_interrupt(I2CDriver *i2cp, uint32_t isr) {
   if (isr & I2C_ISR_TIMEOUT)
     i2cp->errors |= I2C_TIMEOUT;
 
-  /* If some error has been identified then sends wakes the waiting thread.*/
+  /* If some error has been identified then wake the waiting thread.*/
   if (i2cp->errors != I2C_NO_ERROR)
     _i2c_wakeup_error_isr(i2cp);
 }
@@ -524,8 +532,10 @@ static bool i2c_lld_check_isr_limit(I2CDriver *i2cp) {
     if (i2cp->isr_count++ > i2cp->isr_limit) {
         i2cp->errors |= I2C_ISR_LIMIT;
         i2c_lld_reset(i2cp);
+#if STM32_I2C_USE_DMA == TRUE
         i2c_lld_stop_rx_dma(i2cp);
         i2c_lld_stop_tx_dma(i2cp);
+#endif
         _i2c_wakeup_error_isr(i2cp);
         return true;
     }
@@ -893,11 +903,17 @@ void i2c_lld_init(void) {
   I2CD4.i2c     = I2C4;
 #if STM32_I2C_USE_DMA == TRUE
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
+#if STM32_I2C4_USE_BDMA == TRUE
   I2CD4.is_bdma = true;
-#endif
   I2CD4.rx.bdma = NULL;
   I2CD4.tx.bdma = NULL;
-#endif
+#else
+  I2CD4.is_bdma = false;
+  I2CD4.rx.dma = NULL;
+  I2CD4.tx.dma = NULL;
+#endif /* STM32_I2C4_USE_BDMA == TRUE */
+#endif /* defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED) */
+#endif /* STM32_I2C_USE_DMA == TRUE */
 #if defined(STM32_I2C4_GLOBAL_NUMBER) || defined(__DOXYGEN__)
       nvicEnableVector(STM32_I2C4_GLOBAL_NUMBER, STM32_I2C_I2C4_IRQ_PRIORITY);
 #elif defined(STM32_I2C4_EVENT_NUMBER) && defined(STM32_I2C4_ERROR_NUMBER)
@@ -928,7 +944,7 @@ void i2c_lld_start(I2CDriver *i2cp) {
 #if STM32_I2C_USE_DMA == TRUE
     /* Common DMA modes.*/
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -997,7 +1013,7 @@ void i2c_lld_start(I2CDriver *i2cp) {
         dmaSetRequestSource(i2cp->rx.dma, STM32_DMAMUX1_I2C2_RX);
         dmaSetRequestSource(i2cp->tx.dma, STM32_DMAMUX1_I2C2_TX);
       }
-#endif /*STM32_I2C_USE_DMA == TRUE */
+#endif /* STM32_I2C_USE_DMA == TRUE */
     }
 #endif /* STM32_I2C_USE_I2C2 */
 
@@ -1024,7 +1040,7 @@ void i2c_lld_start(I2CDriver *i2cp) {
         dmaSetRequestSource(i2cp->rx.dma, STM32_DMAMUX1_I2C3_RX);
         dmaSetRequestSource(i2cp->tx.dma, STM32_DMAMUX1_I2C3_TX);
       }
-#endif /*STM32_I2C_USE_DMA == TRUE */
+#endif /* STM32_I2C_USE_DMA == TRUE */
     }
 #endif /* STM32_I2C_USE_I2C3 */
 
@@ -1035,6 +1051,7 @@ void i2c_lld_start(I2CDriver *i2cp) {
       rccEnableI2C4(true);
 #if STM32_I2C_USE_DMA == TRUE
       {
+#if STM32_I2C4_USE_BDMA == TRUE
         i2cp->rx.bdma = bdmaStreamAllocI(STM32_I2C_I2C4_RX_BDMA_STREAM,
                                          STM32_I2C_I2C4_IRQ_PRIORITY,
                                          NULL,
@@ -1050,8 +1067,25 @@ void i2c_lld_start(I2CDriver *i2cp) {
         i2cp->txdmamode |= STM32_BDMA_CR_PL(STM32_I2C_I2C4_DMA_PRIORITY);
         bdmaSetRequestSource(i2cp->rx.bdma, STM32_DMAMUX2_I2C4_RX);
         bdmaSetRequestSource(i2cp->tx.bdma, STM32_DMAMUX2_I2C4_TX);
+#else /* STM32_I2C4_USE_BDMA != TRUE */
+        i2cp->rx.dma = dmaStreamAllocI(STM32_I2C_I2C4_RX_DMA_STREAM,
+                                        STM32_I2C_I2C4_IRQ_PRIORITY,
+                                        NULL,
+                                        NULL);
+         osalDbgAssert(i2cp->rx.dma != NULL, "unable to allocate stream");
+         i2cp->tx.dma = dmaStreamAllocI(STM32_I2C_I2C4_TX_DMA_STREAM,
+                                        STM32_I2C_I2C4_IRQ_PRIORITY,
+                                        NULL,
+                                        NULL);
+         osalDbgAssert(i2cp->tx.dma != NULL, "unable to allocate stream");
+
+         i2cp->rxdmamode |= STM32_DMA_CR_PL(STM32_I2C_I2C4_DMA_PRIORITY);
+         i2cp->txdmamode |= STM32_DMA_CR_PL(STM32_I2C_I2C4_DMA_PRIORITY);
+         dmaSetRequestSource(i2cp->rx.dma, STM32_DMAMUX1_I2C4_RX);
+         dmaSetRequestSource(i2cp->tx.dma, STM32_DMAMUX1_I2C4_TX);
+#endif /* STM32_I2C4_USE_BDMA != TRUE */
       }
-#endif /*STM32_I2C_USE_DMA == TRUE */
+#endif /* STM32_I2C_USE_DMA == TRUE */
     }
 #endif /* STM32_I2C_USE_I2C4 */
   }
@@ -1059,7 +1093,7 @@ void i2c_lld_start(I2CDriver *i2cp) {
 #if STM32_I2C_USE_DMA == TRUE
   /* I2C registers pointed by the DMA.*/
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -1108,7 +1142,7 @@ void i2c_lld_stop(I2CDriver *i2cp) {
     i2c_lld_abort_operation(i2cp);
 
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-    if(i2cp->is_bdma)
+    if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
     {
@@ -1231,7 +1265,7 @@ msg_t i2c_lld_master_receive_timeout(I2CDriver *i2cp, i2caddr_t addr,
   i2cp->isr_limit = rxbytes * STM32_I2C_ISR_LIMIT;
   i2cp->isr_count = 0;
 #endif // STM32_I2C_ISR_LIMIT
-  
+
   /* Sizes of transfer phases.*/
   i2cp->txbytes = 0U;
   i2cp->rxbytes = rxbytes;
@@ -1239,7 +1273,7 @@ msg_t i2c_lld_master_receive_timeout(I2CDriver *i2cp, i2caddr_t addr,
 #if STM32_I2C_USE_DMA == TRUE
   /* RX DMA setup.*/
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -1312,9 +1346,12 @@ msg_t i2c_lld_master_receive_timeout(I2CDriver *i2cp, i2caddr_t addr,
   msg = osalThreadSuspendTimeoutS(&i2cp->thread, timeout);
 
   /* In case of a software timeout a STOP is sent as an extreme attempt
-     to release the bus.*/
+     to release the bus and DMA is forcibly disabled.*/
   if (msg == MSG_TIMEOUT) {
     dp->CR2 |= I2C_CR2_STOP;
+#if STM32_I2C_USE_DMA == TRUE
+    i2c_lld_stop_rx_dma(i2cp);
+#endif
   }
 
 #if STM32_I2C_USE_DMA == TRUE
@@ -1367,7 +1404,7 @@ msg_t i2c_lld_master_transmit_timeout(I2CDriver *i2cp, i2caddr_t addr,
   i2cp->isr_limit = (txbytes + rxbytes) * STM32_I2C_ISR_LIMIT;
   i2cp->isr_count = 0;
 #endif // STM32_I2C_ISR_LIMIT
-  
+
   /* Sizes of transfer phases.*/
   i2cp->txbytes = txbytes;
   i2cp->rxbytes = rxbytes;
@@ -1375,7 +1412,7 @@ msg_t i2c_lld_master_transmit_timeout(I2CDriver *i2cp, i2caddr_t addr,
 #if STM32_I2C_USE_DMA == TRUE
   /* TX and RX DMA setup.*/
 #if defined(STM32_I2C_DMA_REQUIRED) && defined(STM32_I2C_BDMA_REQUIRED)
-  if(i2cp->is_bdma)
+  if (i2cp->is_bdma)
 #endif
 #if defined(STM32_I2C_BDMA_REQUIRED)
   {
@@ -1456,9 +1493,13 @@ msg_t i2c_lld_master_transmit_timeout(I2CDriver *i2cp, i2caddr_t addr,
   msg = osalThreadSuspendTimeoutS(&i2cp->thread, timeout);
 
   /* In case of a software timeout a STOP is sent as an extreme attempt
-     to release the bus.*/
+     to release the bus and DMA is forcibly disabled.*/
   if (msg == MSG_TIMEOUT) {
     dp->CR2 |= I2C_CR2_STOP;
+#if STM32_I2C_USE_DMA == TRUE
+    i2c_lld_stop_rx_dma(i2cp);
+    i2c_lld_stop_tx_dma(i2cp);
+#endif
   }
 
 #if STM32_I2C_USE_DMA == TRUE

@@ -15,7 +15,7 @@
 
 #include "AP_Proximity_LightWareSerial.h"
 
-//#if HAL_PROXIMITY_ENABLED
+#if HAL_PROXIMITY_ENABLED
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/utility/sparse-endian.h>
@@ -141,4 +141,4 @@ bool AP_Proximity_LightWareSerial::parse_byte(uint8_t b)
     return false;
 }
 
-//#endif // HAL_PROXIMITY_ENABLED
+#endif // HAL_PROXIMITY_ENABLED

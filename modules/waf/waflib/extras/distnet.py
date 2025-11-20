@@ -44,7 +44,7 @@ TARFORMAT = 'w:bz2'
 TIMEOUT = 60
 REQUIRES = 'requires.txt'
 
-re_com = re.compile('\s*#.*', re.M)
+re_com = re.compile(r'\s*#.*', re.M)
 
 def total_version_order(num):
 	lst = num.split('.')
@@ -101,6 +101,8 @@ class package(Context.Context):
 				tarinfo.uid   = tarinfo.gid   = 0
 				tarinfo.uname = tarinfo.gname = 'root'
 				tarinfo.size = os.stat(x).st_size
+				if os.environ.get('SOURCE_DATE_EPOCH'):
+					tarinfo.mtime = int(os.environ.get('SOURCE_DATE_EPOCH'))
 
 				# TODO - more archive creation options?
 				if kw.get('bare', True):

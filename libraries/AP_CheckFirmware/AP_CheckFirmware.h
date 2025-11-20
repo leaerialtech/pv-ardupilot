@@ -6,7 +6,7 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_OpenDroneID/AP_OpenDroneID_config.h>
 #include <AP_HAL/AP_HAL.h>
-//#include <GCS_MAVLink/GCS_config.h>
+#include <GCS_MAVLink/GCS_config.h>
 #if HAL_GCS_ENABLED
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #endif
@@ -39,7 +39,7 @@ enum class check_fw_result_t : uint8_t {
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !defined(APJ_BOARD_ID)
-// this allows for sitl_periph_gps to build
+// this allows for sitl_periph to build
 #define APJ_BOARD_ID 0
 #endif
 

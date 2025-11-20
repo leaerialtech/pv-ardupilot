@@ -93,7 +93,7 @@ include $(CHIBIOS)/os/license/license.mk
 include $(CHIBIOS)/os/hal/hal.mk
 include $(CHIBIOS)/os/hal/boards/MT-DB-X4/board.mk
 include $(CHIBIOS)/os/hal/ports/AVR/XMEGA/ATXMEGAxxxA4U/platform.mk
-include $(CHIBIOS)/os/hal/osal/rt/osal.mk
+include $(CHIBIOS)/os/hal/osal/rt-nil/osal.mk
 
 # RTOS files (optional).
 include $(CHIBIOS)/os/rt/rt.mk
@@ -239,7 +239,7 @@ endif
 
 # AVR programmer flags for DFU programmer.
 ifeq ($(AVR_PROGRAMMER),$(DFU_PROGRAMMER))
-DFU_WRITE_FLASH = flash --force
+DFU_WRITE_FLASH = flash
 DFU_ERASE_FLASH = erase
 DFU_RESET=reset
 endif

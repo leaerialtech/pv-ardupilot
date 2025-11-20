@@ -27,16 +27,7 @@
 
 #pragma once
 
-#include <AP_HAL/AP_HAL_Boards.h>
 #include "AP_OpenDroneID_config.h"
-
-#ifndef AP_OPENDRONEID_ENABLED
-// default to off. Enabled in hwdef.dat
-#define AP_OPENDRONEID_ENABLED 0
-#endif
-
-#define AP_OPENDRONEID_DRONECAN_ENABLED (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS)
-#define HAL_MAX_CAN_PROTOCOL_DRIVERS 2
 
 #if AP_OPENDRONEID_ENABLED
 
@@ -66,10 +57,7 @@
 #define ODID_AREA_COUNT_MIN  1
 #define ODID_AREA_COUNT_MAX  65000
 
-class AP_UAVCAN;
-
-// used to forbid copy of objects
-#define CLASS_NO_COPY(c) c(const c &other) = delete; c &operator=(const c&) = delete
+class AP_DroneCAN;
 
 class AP_OpenDroneID
 {
@@ -87,7 +75,7 @@ public:
     void update();
 
     // send pending dronecan messages
-    void dronecan_send(AP_UAVCAN *);
+    void dronecan_send(AP_DroneCAN *);
 
     // handle a message from the GCS
     void handle_msg(mavlink_channel_t chan, const mavlink_message_t &msg);
@@ -98,6 +86,12 @@ public:
 
     void set_arm_status(mavlink_open_drone_id_arm_status_t &status);
 
+    void set_basic_id();
+
+    void get_persistent_params(ExpandingString &str) const;
+
+    void load_UAS_ID_from_persistent_memory();
+
     // get singleton instance
     static AP_OpenDroneID *get_singleton()
     {
@@ -105,7 +99,7 @@ public:
     }
 private:
     static AP_OpenDroneID *_singleton;
-
+    bool _initialised;
     // parameters
     AP_Int8  _enable;
     AP_Float _baro_accuracy;    // Vertical accuracy of the barometer when installed
@@ -113,8 +107,15 @@ private:
     AP_Int8  _mav_port;
     AP_Int8  _can_driver;
 
+    char ua_type[3];
+    char id_type[3];
+    size_t id_len;
+    char id_str[21];
+    bool bootloader_flashed;
     enum Options : int16_t {
         EnforceArming     = (1U << 0U),
+        AllowNonGPSPosition = (1U << 1U),
+        LockUASIDOnFirstBasicIDRx = (1U << 2U),
     };
 
     // check if an option is set
@@ -123,16 +124,13 @@ private:
         return (uint8_t(_options.get()) & uint8_t(option)) != 0;
     }
 
-
-    bool _hadLostOperatorLocation = false; 
-
     mavlink_channel_t _chan; // MAVLink channel that communicates with the Remote ID Transceiver
     const mavlink_channel_t MAV_CHAN_INVALID = mavlink_channel_t(255U);
     uint32_t _last_send_location_ms;
     uint32_t _last_send_system_update_ms;
     uint32_t _last_send_static_messages_ms;
     const uint32_t _mavlink_dynamic_period_ms = 1000; //how often are mavlink dynamic messages sent in ms. E.g. 1000 = 1 Hz
-    const uint32_t _mavlink_static_period_ms = 5000; //how often are mavlink static messages sent in ms
+    const uint32_t _mavlink_static_period_ms = 3000; //how often are mavlink static messages sent in ms
 
     bool     _have_height_above_takeoff;
     Location _takeoff_location;
@@ -161,9 +159,6 @@ private:
 
     // last time we sent a lost operator location notice
     uint32_t last_lost_operator_msg_ms;
-
-
-     uint32_t last_pv_status_refresh = 0;
     
     // transmit functions to manually send a static MAVLink message
     void send_dynamic_out();
@@ -196,6 +191,7 @@ private:
 
     // mask of what UAVCAN drivers need to send each packet
     const uint8_t dronecan_send_all = (1U<<HAL_MAX_CAN_PROTOCOL_DRIVERS)-1;
+    uint8_t driver_mask;
     uint8_t need_send_location;
     uint8_t need_send_basic_id;
     uint8_t need_send_system;
@@ -204,12 +200,12 @@ private:
 
     uint8_t dronecan_done_init;
     uint8_t dronecan_init_failed;
-    void dronecan_init(AP_UAVCAN *uavcan);
-    void dronecan_send_location(AP_UAVCAN *uavcan);
-    void dronecan_send_basic_id(AP_UAVCAN *uavcan);
-    void dronecan_send_system(AP_UAVCAN *uavcan);
-    void dronecan_send_self_id(AP_UAVCAN *uavcan);
-    void dronecan_send_operator_id(AP_UAVCAN *uavcan);
+    void dronecan_init(AP_DroneCAN *uavcan);
+    void dronecan_send_location(AP_DroneCAN *uavcan);
+    void dronecan_send_basic_id(AP_DroneCAN *uavcan);
+    void dronecan_send_system(AP_DroneCAN *uavcan);
+    void dronecan_send_self_id(AP_DroneCAN *uavcan);
+    void dronecan_send_operator_id(AP_DroneCAN *uavcan);
 };
 
 namespace AP

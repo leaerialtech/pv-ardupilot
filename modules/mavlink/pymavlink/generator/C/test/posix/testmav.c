@@ -110,7 +110,10 @@ static void print_field(mavlink_message_t *msg, const mavlink_field_info_t *f)
 	printf(" ");
 }
 
-static void print_message(mavlink_message_t *msg)
+
+mavlink_status_t *statusp;
+
+static void print_message(mavlink_message_t *msg,mavlink_channel_t chan)
 {
 	const mavlink_message_info_t *m = mavlink_get_message_info(msg);
 	if (m == NULL) {
@@ -120,6 +123,14 @@ static void print_message(mavlink_message_t *msg)
 	}
 	const mavlink_field_info_t *f = m->fields;
 	unsigned i;
+	printf("sysid:%d ", msg->sysid);
+	printf("compid:%d ", msg->compid);
+	printf("seq:%d ", msg->seq);
+#ifdef MAVLINK_SIGNING_FLAG_SIGN_OUTGOING
+    // only print if links has a statusp, and it's not null, and we are channel 1, where signing is active
+    if ( statusp && (statusp->signing != NULL) && (chan == MAVLINK_COMM_1) )  
+        printf("sign_ts:%ld ", statusp->signing->timestamp-1); // subtract 1 from ts as api increments it before here
+#endif
 	printf("%s { ", m->name);
 	for (i=0; i<m->num_fields; i++) {
 		print_field(msg, &f[i]);
@@ -140,8 +151,15 @@ static void comm_send_ch(mavlink_channel_t chan, uint8_t c)
 	status.signing = &signing_in[chan];
         status.signing_streams = &signing_streams_in;
 #endif
+#define SHOW_AS_HEX 1
+#ifdef SHOW_AS_HEX
+    printf("%02x ",c);
+#endif
 	if (mavlink_parse_char(chan, c, &last_msg, &status)) {
-		print_message(&last_msg);
+#ifdef SHOW_AS_HEX
+    printf("\n");
+#endif
+		print_message(&last_msg,chan);
 		chan_counts[chan]++;
 		/* channel 0 gets 3 messages per message, because of
 		   the channel defaults for _pack() and _encode() */
@@ -168,10 +186,91 @@ static void comm_send_ch(mavlink_channel_t chan, uint8_t c)
 	}
 }
 
+#ifdef MAVLINK_HAVE_GET_MESSAGE_INFO
+static const mavlink_message_info_t *dumb_search_info(const mavlink_message_info_t *msgs, uint32_t num_ids, uint32_t id)
+{
+    for (uint32_t i=0; i<num_ids; i++) {
+        if (msgs[i].msgid == id) {
+            return &msgs[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_get_message_info_by_id()
+{
+    const mavlink_message_info_t *msgs = mavlink_get_message_info_by_id(0);
+    static const mavlink_msg_entry_t crcs[] = MAVLINK_MESSAGE_CRCS;
+    const uint32_t num_msgs = sizeof(crcs)/sizeof(crcs[0]);
+    for (uint32_t i=0; i<70000; i++) {
+        const mavlink_message_info_t *m1 = mavlink_get_message_info_by_id(i);
+        const mavlink_message_info_t *m2 = dumb_search_info(msgs, num_msgs, i);
+        if (m1 != m2) {
+            printf("Search error for id %u\n", (unsigned)i);
+            error_count++;
+        }
+    }
+}
+
+static const mavlink_message_info_t *dumb_search_name(const mavlink_message_info_t *msgs, uint32_t num_ids, const char *name)
+{
+    for (uint32_t i=0; i<num_ids; i++) {
+        if (strcmp(msgs[i].name, name) == 0) {
+            return &msgs[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_get_message_info_by_name()
+{
+    static const char *test_names[] = { "HEARTBEAT", "STATUS_TEXT", "ATTITUDE", "FOOBLAH", "SILLY_NAME" };
+    const uint8_t num_names = sizeof(test_names)/sizeof(test_names[0]);
+    const mavlink_message_info_t *msgs = mavlink_get_message_info_by_id(0);
+    static const mavlink_msg_entry_t crcs[] = MAVLINK_MESSAGE_CRCS;
+    const uint32_t num_msgs = sizeof(crcs)/sizeof(crcs[0]);
+    for (uint32_t i=0; i<num_names; i++) {
+        const mavlink_message_info_t *m1 = mavlink_get_message_info_by_name(test_names[i]);
+        const mavlink_message_info_t *m2 = dumb_search_name(msgs, num_msgs, test_names[i]);
+        if (m1 != m2) {
+            printf("Search error for id %s\n", test_names[i]);
+            error_count++;
+        }
+    }
+}
+
+
+static const mavlink_msg_entry_t *dumb_search_entry(const mavlink_msg_entry_t *msgs, uint32_t num_ids, uint32_t id)
+{
+    for (uint32_t i=0; i<num_ids; i++) {
+        if (msgs[i].msgid == id) {
+            return &msgs[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_get_msg_entry()
+{
+    const mavlink_msg_entry_t *msgs = mavlink_get_msg_entry(0);
+    static const mavlink_msg_entry_t crcs[] = MAVLINK_MESSAGE_CRCS;
+    const uint32_t num_msgs = sizeof(crcs)/sizeof(crcs[0]);
+    for (uint32_t i=0; i<70000; i++) {
+        const mavlink_msg_entry_t *m1 = mavlink_get_msg_entry(i);
+        const mavlink_msg_entry_t *m2 = dumb_search_entry(msgs, num_msgs, i);
+        if (m1 != m2) {
+            printf("Search error for entry id %u\n", (unsigned)i);
+            error_count++;
+        }
+    }
+}
+#endif // MAVLINK_HAVE_GET_MESSAGE_INFO
+
 int main(void)
 {
 	mavlink_channel_t chan;
 
+        printf("Running mavlink_test_all\n");
 	mavlink_test_all(11, 10, &last_msg);
 	for (chan=MAVLINK_COMM_0; chan<=MAVLINK_COMM_1; chan++) {
 		printf("Received %u messages on channel %u OK\n", 
@@ -183,8 +282,19 @@ int main(void)
 	}
 	printf("No errors detected\n");
 
+        printf("Running mavlink_test_minimal\n");
+        mavlink_test_minimal(11, 10, &last_msg);
+	for (chan=MAVLINK_COMM_0; chan<=MAVLINK_COMM_1; chan++) {
+		printf("Received %u messages on channel %u OK\n", 
+		       chan_counts[chan], (unsigned)chan);
+	}
+	if (error_count != 0) {
+		printf("Error count %u\n", error_count);
+		exit(1);
+	}
+	printf("No errors detected\n");
+        
 #ifdef MAVLINK_SIGNING_FLAG_SIGN_OUTGOING
-	mavlink_status_t *status;
 
 	printf("Testing signing\n");
 	mavlink_signing_t signing;
@@ -196,9 +306,18 @@ int main(void)
 	signing.timestamp = 1;
 	memset(signing.secret_key, 42, sizeof(signing.secret_key));
 
-        status = mavlink_get_channel_status(MAVLINK_COMM_1);
-	status->signing = &signing;
-        status->signing_streams = &signing_streams;
+  // 32 length uint8 signing.secret_key
+	printf("signing_key = [ ");
+	for (unsigned s=0; s<sizeof(signing.secret_key); s++) {
+		if (s < 31) printf("%u, ", signing.secret_key[s]);
+		if (s == 31) printf("%u ", signing.secret_key[s]);
+	}
+	printf("]\n");
+
+    // we enable signing on channel 1 only, so the below loop alternately puts out non-signed and signed.
+	statusp = mavlink_get_channel_status(MAVLINK_COMM_1);
+	statusp->signing = &signing;
+	statusp->signing_streams = &signing_streams;
 
 	mavlink_test_all(11, 10, &last_msg);
 	for (chan=MAVLINK_COMM_0; chan<=MAVLINK_COMM_1; chan++) {
@@ -213,12 +332,12 @@ int main(void)
 #endif
 
 #ifdef MAVLINK_STATUS_FLAG_OUT_MAVLINK1
-        status = mavlink_get_channel_status(MAVLINK_COMM_0);
-        status->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
-        status->signing = NULL;
-        status = mavlink_get_channel_status(MAVLINK_COMM_1);
-        status->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
-        status->signing = NULL;
+        statusp = mavlink_get_channel_status(MAVLINK_COMM_0);
+        statusp->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
+        statusp->signing = NULL;
+        statusp = mavlink_get_channel_status(MAVLINK_COMM_1);
+        statusp->flags |= MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
+        statusp->signing = NULL;
         printf("Testing sending as MAVLink1\n");
         
 	mavlink_test_all(11, 10, &last_msg);
@@ -233,7 +352,12 @@ int main(void)
 	printf("No errors detected\n");
 #endif
 
-	
+#ifdef MAVLINK_HAVE_GET_MESSAGE_INFO
+        test_get_message_info_by_id();
+        test_get_message_info_by_name();
+        test_get_msg_entry();
+#endif
+
 	return 0;
 }
 

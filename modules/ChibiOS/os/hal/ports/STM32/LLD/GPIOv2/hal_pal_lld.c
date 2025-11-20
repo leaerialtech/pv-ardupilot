@@ -160,28 +160,26 @@ void _pal_lld_enablepadevent(ioportid_t port,
   /* Multiple channel setting of the same channel not allowed, first disable
      it. This is done because on STM32 the same channel cannot be mapped on
      multiple ports.*/
-#if defined(STM32_EXTI_ENHANCED)
   osalDbgAssert(((EXTI->RTSR1 & padmask) == 0U) &&
                 ((EXTI->FTSR1 & padmask) == 0U), "channel already in use");
-#else
-  osalDbgAssert(((EXTI->RTSR & padmask) == 0U) &&
-                ((EXTI->FTSR & padmask) == 0U), "channel already in use");
-#endif
-
-  /* Index and mask of the SYSCFG CR register to be used.*/
-  cridx  = (uint32_t)pad >> 2U;
-  croff = ((uint32_t)pad & 3U) * 4U;
-  crmask = ~(0xFU << croff);
 
   /* Port index is obtained assuming that GPIO ports are placed at regular
      0x400 intervals in memory space. So far this is true for all devices.*/
   portidx = (((uint32_t)port - (uint32_t)GPIOA) >> 10U) & 0xFU;
 
-  /* Port selection in SYSCFG.*/
+  /* Index and mask of the CR register to be used.*/
+  cridx  = (uint32_t)pad >> 2U;
+#if STM32_EXTI_HAS_CR == FALSE
+  croff  = ((uint32_t)pad & 3U) * 4U;
+  crmask = ~(0xFU << croff);
   SYSCFG->EXTICR[cridx] = (SYSCFG->EXTICR[cridx] & crmask) | (portidx << croff);
+#else
+  croff  = ((uint32_t)pad & 3U) * 8U;
+  crmask = ~(0xFFU << croff);
+  EXTI->EXTICR[cridx] = (EXTI->EXTICR[cridx] & crmask) | (portidx << croff);
+#endif
 
   /* Programming edge registers.*/
-#if defined(STM32_EXTI_ENHANCED)
   if (mode & PAL_EVENT_MODE_RISING_EDGE)
     EXTI->RTSR1 |= padmask;
   else
@@ -192,21 +190,12 @@ void _pal_lld_enablepadevent(ioportid_t port,
     EXTI->FTSR1 &= ~padmask;
 
   /* Programming interrupt and event registers.*/
+#if defined(STM32_EXTI_ENHANCED)
   EXTI_D1->IMR1 |= padmask;
   EXTI_D1->EMR1 &= ~padmask;
 #else
-  if (mode & PAL_EVENT_MODE_RISING_EDGE)
-    EXTI->RTSR |= padmask;
-  else
-    EXTI->RTSR &= ~padmask;
-  if (mode & PAL_EVENT_MODE_FALLING_EDGE)
-    EXTI->FTSR |= padmask;
-  else
-    EXTI->FTSR &= ~padmask;
-
-  /* Programming interrupt and event registers.*/
-  EXTI->IMR |= padmask;
-  EXTI->EMR &= ~padmask;
+  EXTI->IMR1 |= padmask;
+  EXTI->EMR1 &= ~padmask;
 #endif
 }
 
@@ -222,13 +211,8 @@ void _pal_lld_enablepadevent(ioportid_t port,
 void _pal_lld_disablepadevent(ioportid_t port, iopadid_t pad) {
   uint32_t padmask, rtsr1, ftsr1;
 
-#if defined(STM32_EXTI_ENHANCED)
   rtsr1 = EXTI->RTSR1;
   ftsr1 = EXTI->FTSR1;
-#else
-  rtsr1 = EXTI->RTSR;
-  ftsr1 = EXTI->FTSR;
-#endif
 
   /* Mask of the pad.*/
   padmask = 1U << (uint32_t)pad;
@@ -237,15 +221,19 @@ void _pal_lld_disablepadevent(ioportid_t port, iopadid_t pad) {
   if (((rtsr1 | ftsr1) & padmask) != 0U) {
     uint32_t cridx, croff, crport, portidx;
 
-    /* Index and mask of the SYSCFG CR register to be used.*/
-    cridx  = (uint32_t)pad >> 2U;
-    croff = ((uint32_t)pad & 3U) * 4U;
-
     /* Port index is obtained assuming that GPIO ports are placed at regular
        0x400 intervals in memory space. So far this is true for all devices.*/
     portidx = (((uint32_t)port - (uint32_t)GPIOA) >> 10U) & 0xFU;
 
+    /* Index and mask of the CR register to be used.*/
+    cridx  = (uint32_t)pad >> 2U;
+#if STM32_EXTI_HAS_CR == FALSE
+    croff  = ((uint32_t)pad & 3U) * 4U;
     crport = (SYSCFG->EXTICR[cridx] >> croff) & 0xFU;
+#else
+    croff  = ((uint32_t)pad & 3U) * 8U;
+    crport = (EXTI->EXTICR[cridx] >> croff) & 0xFFU;
+#endif
 
     osalDbgAssert(crport == portidx, "channel mapped on different port");
 
@@ -258,11 +246,16 @@ void _pal_lld_disablepadevent(ioportid_t port, iopadid_t pad) {
     EXTI_D1->PR1    = padmask;
 #else
     /* Disabling channel.*/
-    EXTI->IMR  &= ~padmask;
-    EXTI->EMR  &= ~padmask;
-    EXTI->RTSR  = rtsr1 & ~padmask;
-    EXTI->FTSR  = ftsr1 & ~padmask;
-    EXTI->PR    = padmask;
+    EXTI->IMR1  &= ~padmask;
+    EXTI->EMR1  &= ~padmask;
+    EXTI->RTSR1  = rtsr1 & ~padmask;
+    EXTI->FTSR1  = ftsr1 & ~padmask;
+#if STM32_EXTI_SEPARATE_RF == FALSE
+    EXTI->PR1    = padmask;
+#else
+    EXTI->RPR1   = padmask;
+    EXTI->FPR1   = padmask;
+#endif
 #endif
 
 #if PAL_USE_CALLBACKS || PAL_USE_WAIT

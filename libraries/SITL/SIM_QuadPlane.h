@@ -38,6 +38,7 @@ public:
     static Aircraft *create(const char *frame_str) {
         return new QuadPlane(frame_str);
     }
+
 private:
     Frame *frame;
 };

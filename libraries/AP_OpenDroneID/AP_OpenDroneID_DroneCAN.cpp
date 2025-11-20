@@ -20,102 +20,67 @@
 
 #if AP_OPENDRONEID_ENABLED
 
-#if AP_OPENDRONEID_DRONECAN_ENABLED
-#include <AP_UAVCAN/AP_UAVCAN.h>
-#include <dronecan/remoteid/Location.hpp>
-#include <dronecan/remoteid/BasicID.hpp>
-#include <dronecan/remoteid/SelfID.hpp>
-#include <dronecan/remoteid/OperatorID.hpp>
-#include <dronecan/remoteid/System.hpp>
-#include <dronecan/remoteid/ArmStatus.hpp>
+#include <AP_DroneCAN/AP_DroneCAN.h>
 
-#include <GCS_MAVLink/GCS_MAVLink.h>
+#if HAL_ENABLE_DRONECAN_DRIVERS
 #include <GCS_MAVLink/GCS.h>
 
-static uavcan::Publisher<dronecan::remoteid::Location>* dc_location[HAL_MAX_CAN_PROTOCOL_DRIVERS];
-static uavcan::Publisher<dronecan::remoteid::BasicID>* dc_basic_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
-static uavcan::Publisher<dronecan::remoteid::SelfID>* dc_self_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
-static uavcan::Publisher<dronecan::remoteid::System>* dc_system[HAL_MAX_CAN_PROTOCOL_DRIVERS];
-static uavcan::Publisher<dronecan::remoteid::OperatorID>* dc_operator_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
+static Canard::Publisher<dronecan_remoteid_Location>* dc_location[HAL_MAX_CAN_PROTOCOL_DRIVERS];
+static Canard::Publisher<dronecan_remoteid_BasicID>* dc_basic_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
+static Canard::Publisher<dronecan_remoteid_SelfID>* dc_self_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
+static Canard::Publisher<dronecan_remoteid_System>* dc_system[HAL_MAX_CAN_PROTOCOL_DRIVERS];
+static Canard::Publisher<dronecan_remoteid_OperatorID>* dc_operator_id[HAL_MAX_CAN_PROTOCOL_DRIVERS];
 
-/*
-  backport helpers
- */
+static void handle_arm_status(AP_DroneCAN* ap_dronecan, const CanardRxTransfer &transfer, const dronecan_remoteid_ArmStatus &msg);
 
-// send text when we do have a GCS
-#ifndef GCS_SEND_TEXT
-#define GCS_SEND_TEXT(severity, format, args...) gcs().send_text(severity, format, ##args)
-#endif
-
-/*
-  strncpy without the warning for not leaving room for nul termination
- */
-static void strncpy_noterm(char *dest, const char *src, size_t n)
-{
-    size_t len = strnlen(src, n);
-    if (len < n) {
-        // include nul term if it fits
-        len++;
-    }
-    memcpy(dest, src, len);
-}
-
-
-// handle ArmStatus
-UC_REGISTRY_BINDER(ArmStatusCb, dronecan::remoteid::ArmStatus);
-static uavcan::Subscriber<dronecan::remoteid::ArmStatus, ArmStatusCb> *arm_status_listener[HAL_MAX_CAN_PROTOCOL_DRIVERS];
-
-static void handle_arm_status(AP_UAVCAN* ap_uavcan, uint8_t node_id, const ArmStatusCb &cb);
-
-void AP_OpenDroneID::dronecan_init(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_init(AP_DroneCAN *uavcan)
 {
     const uint8_t driver_index = uavcan->get_driver_index();
-    const uint8_t driver_mask = 1U<<driver_index;
+    driver_mask = 1U<<driver_index;
     if (dronecan_done_init & driver_mask) {
         // already initialised
         return;
     }
 
-    dc_location[driver_index] = new uavcan::Publisher<dronecan::remoteid::Location>(*uavcan->get_node());
+    dc_location[driver_index] = new Canard::Publisher<dronecan_remoteid_Location>(uavcan->get_canard_iface());
     if (dc_location[driver_index] == nullptr) {
         goto alloc_failed;
     }
-    dc_location[driver_index]->setTxTimeout(uavcan::MonotonicDuration::fromMSec(20));
-    dc_location[driver_index]->setPriority(uavcan::TransferPriority::OneHigherThanLowest);
+    dc_location[driver_index]->set_timeout_ms(20);
+    dc_location[driver_index]->set_priority(CANARD_TRANSFER_PRIORITY_LOW);
 
-    dc_basic_id[driver_index] = new uavcan::Publisher<dronecan::remoteid::BasicID>(*uavcan->get_node());
+    dc_basic_id[driver_index] = new Canard::Publisher<dronecan_remoteid_BasicID>(uavcan->get_canard_iface());
     if (dc_basic_id[driver_index] == nullptr) {
         goto alloc_failed;
     }
-    dc_basic_id[driver_index]->setTxTimeout(uavcan::MonotonicDuration::fromMSec(20));
-    dc_basic_id[driver_index]->setPriority(uavcan::TransferPriority::OneHigherThanLowest);
+    dc_basic_id[driver_index]->set_timeout_ms(20);
+    dc_basic_id[driver_index]->set_priority(CANARD_TRANSFER_PRIORITY_LOW);
 
-    dc_self_id[driver_index] = new uavcan::Publisher<dronecan::remoteid::SelfID>(*uavcan->get_node());
+    dc_self_id[driver_index] = new Canard::Publisher<dronecan_remoteid_SelfID>(uavcan->get_canard_iface());
     if (dc_self_id[driver_index] == nullptr) {
         goto alloc_failed;
     }
-    dc_self_id[driver_index]->setTxTimeout(uavcan::MonotonicDuration::fromMSec(20));
-    dc_self_id[driver_index]->setPriority(uavcan::TransferPriority::OneHigherThanLowest);
+    dc_self_id[driver_index]->set_timeout_ms(20);
+    dc_self_id[driver_index]->set_priority(CANARD_TRANSFER_PRIORITY_LOW);
 
-    dc_system[driver_index] = new uavcan::Publisher<dronecan::remoteid::System>(*uavcan->get_node());
+    dc_system[driver_index] = new Canard::Publisher<dronecan_remoteid_System>(uavcan->get_canard_iface());
     if (dc_system[driver_index] == nullptr) {
         goto alloc_failed;
     }
-    dc_system[driver_index]->setTxTimeout(uavcan::MonotonicDuration::fromMSec(20));
-    dc_system[driver_index]->setPriority(uavcan::TransferPriority::OneHigherThanLowest);
+    dc_system[driver_index]->set_timeout_ms(20);
+    dc_system[driver_index]->set_priority(CANARD_TRANSFER_PRIORITY_LOW);
 
-    dc_operator_id[driver_index] = new uavcan::Publisher<dronecan::remoteid::OperatorID>(*uavcan->get_node());
+    dc_operator_id[driver_index] = new Canard::Publisher<dronecan_remoteid_OperatorID>(uavcan->get_canard_iface());
     if (dc_operator_id[driver_index] == nullptr) {
         goto alloc_failed;
     }
-    dc_operator_id[driver_index]->setTxTimeout(uavcan::MonotonicDuration::fromMSec(20));
-    dc_operator_id[driver_index]->setPriority(uavcan::TransferPriority::OneHigherThanLowest);
+    dc_operator_id[driver_index]->set_timeout_ms(20);
+    dc_operator_id[driver_index]->set_priority(CANARD_TRANSFER_PRIORITY_LOW);
 
-    arm_status_listener[driver_index] = new uavcan::Subscriber<dronecan::remoteid::ArmStatus, ArmStatusCb>(*uavcan->get_node());
-    if (arm_status_listener[driver_index] == nullptr) {
+    if (Canard::allocate_sub_arg_callback(uavcan, &handle_arm_status, driver_index) == nullptr)
+    {
         goto alloc_failed;
     }
-    arm_status_listener[driver_index]->start(ArmStatusCb(uavcan, &handle_arm_status));
 
     dronecan_done_init |= driver_mask;
     return;
@@ -128,16 +93,8 @@ alloc_failed:
 /*
   send pending DroneCAN OpenDroneID packets
  */
-void AP_OpenDroneID::dronecan_send(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send(AP_DroneCAN *uavcan)
 {
-    const uint8_t driver_index = uavcan->get_driver_index();
-    const uint8_t driver_mask = 1U<<driver_index;
-
-    if (driver_index+1 != _can_driver) {
-        // not enabled for this CAN driver
-        return;
-    }
-
     dronecan_init(uavcan);
 
     if (dronecan_init_failed & driver_mask) {
@@ -172,12 +129,12 @@ void AP_OpenDroneID::dronecan_send(AP_UAVCAN *uavcan)
 }
 
 #define ODID_COPY(name) msg.name = pkt.name
-#define ODID_COPY_STR(name) do { for (uint8_t i = 0; i<sizeof(pkt.name) && pkt.name[i]; i++) msg.name.push_back(pkt.name[i]); } while(0)
+#define ODID_COPY_STR(name) do { msg.name.len = strncpy_noterm((char*)msg.name.data, (const char*)pkt.name, sizeof(msg.name.data)); } while(0)
 
 
-void AP_OpenDroneID::dronecan_send_location(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send_location(AP_DroneCAN *uavcan)
 {
-    dronecan::remoteid::Location msg {};
+    dronecan_remoteid_Location msg {};
     const auto &pkt = pkt_location;
     ODID_COPY_STR(id_or_mac);
     ODID_COPY(status);
@@ -199,9 +156,9 @@ void AP_OpenDroneID::dronecan_send_location(AP_UAVCAN *uavcan)
     dc_location[uavcan->get_driver_index()]->broadcast(msg);
 }
 
-void AP_OpenDroneID::dronecan_send_basic_id(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send_basic_id(AP_DroneCAN *uavcan)
 {
-    dronecan::remoteid::BasicID msg {};
+    dronecan_remoteid_BasicID msg {};
     const auto &pkt = pkt_basic_id;
     ODID_COPY_STR(id_or_mac);
     ODID_COPY(id_type);
@@ -210,9 +167,9 @@ void AP_OpenDroneID::dronecan_send_basic_id(AP_UAVCAN *uavcan)
     dc_basic_id[uavcan->get_driver_index()]->broadcast(msg);
 }
 
-void AP_OpenDroneID::dronecan_send_system(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send_system(AP_DroneCAN *uavcan)
 {
-    dronecan::remoteid::System msg {};
+    dronecan_remoteid_System msg {};
     const auto &pkt = pkt_system;
     ODID_COPY_STR(id_or_mac);
     ODID_COPY(operator_location_type);
@@ -230,9 +187,9 @@ void AP_OpenDroneID::dronecan_send_system(AP_UAVCAN *uavcan)
     dc_system[uavcan->get_driver_index()]->broadcast(msg);
 }
 
-void AP_OpenDroneID::dronecan_send_self_id(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send_self_id(AP_DroneCAN *uavcan)
 {
-    dronecan::remoteid::SelfID msg {};
+    dronecan_remoteid_SelfID msg {};
     const auto &pkt = pkt_self_id;
     ODID_COPY_STR(id_or_mac);
     ODID_COPY(description_type);
@@ -240,9 +197,9 @@ void AP_OpenDroneID::dronecan_send_self_id(AP_UAVCAN *uavcan)
     dc_self_id[uavcan->get_driver_index()]->broadcast(msg);
 }
 
-void AP_OpenDroneID::dronecan_send_operator_id(AP_UAVCAN *uavcan)
+void AP_OpenDroneID::dronecan_send_operator_id(AP_DroneCAN *uavcan)
 {
-    dronecan::remoteid::OperatorID msg {};
+    dronecan_remoteid_OperatorID msg {};
     const auto &pkt = pkt_operator_id;
     ODID_COPY_STR(id_or_mac);
     ODID_COPY(operator_id_type);
@@ -253,13 +210,12 @@ void AP_OpenDroneID::dronecan_send_operator_id(AP_UAVCAN *uavcan)
 /*
   handle ArmStatus message from DroneCAN
  */
-static void handle_arm_status(AP_UAVCAN* ap_uavcan, uint8_t node_id, const ArmStatusCb &cb)
+static void handle_arm_status(AP_DroneCAN *ap_dronecan, const CanardRxTransfer& transfer, const dronecan_remoteid_ArmStatus &msg)
 {
-    const auto &msg = *cb.msg;
     mavlink_open_drone_id_arm_status_t status {};
 
     status.status = msg.status;
-    strncpy_noterm(status.error, msg.error.c_str(), sizeof(status.error));
+    strncpy_noterm((char*)status.error, (const char*)msg.error.data, sizeof(status.error));
 
     AP::opendroneid().set_arm_status(status);
 
@@ -275,5 +231,5 @@ void AP_OpenDroneID::set_arm_status(mavlink_open_drone_id_arm_status_t &status)
     last_arm_status_ms = AP_HAL::millis();
 }
 
-#endif // AP_OPENDRONEID_DRONECAN_ENABLED
+#endif // HAL_ENABLE_DRONECAN_DRIVERS
 #endif // AP_OPENDRONEID_ENABLED

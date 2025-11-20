@@ -47,6 +47,7 @@ AP_Stats *AP_Stats::_singleton;
 // constructor
 AP_Stats::AP_Stats(void)
 {
+    AP_Param::setup_object_defaults(this, var_info);
     _singleton = this;
 }
 
@@ -76,6 +77,7 @@ void AP_Stats::flush()
 void AP_Stats::update_flighttime()
 {
     if (_flying_ms) {
+        WITH_SEMAPHORE(sem);
         const uint32_t now = AP_HAL::millis();
         const uint32_t delta = (now - _flying_ms)/1000;
         flttime += delta;
@@ -93,6 +95,7 @@ void AP_Stats::update_runtime()
 
 void AP_Stats::update()
 {
+    WITH_SEMAPHORE(sem);
     const uint32_t now_ms = AP_HAL::millis();
     if (now_ms -  last_flush_ms > flush_interval_ms) {
         update_flighttime();
@@ -106,6 +109,7 @@ void AP_Stats::update()
         params.flttime.set_and_save_ifchanged(0);
         params.runtime.set_and_save_ifchanged(0);
         uint32_t system_clock = 0; // in seconds
+#if AP_RTC_ENABLED
         uint64_t rtc_clock_us;
         if (AP::rtc().get_utc_usec(rtc_clock_us)) {
             system_clock = rtc_clock_us / 1000000;
@@ -113,6 +117,7 @@ void AP_Stats::update()
             // time base to Jan 1st 2016:
             system_clock -= 1451606400;
         }
+#endif
         params.reset.set_and_save_ifchanged(system_clock);
         copy_variables_from_parameters();
     }

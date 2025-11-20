@@ -1,5 +1,5 @@
 /*
-    ChibiOS - Copyright (C) 2006..2017 Giovanni Di Sirio
+    ChibiOS - Copyright (C) 2006..2020 Giovanni Di Sirio
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -1483,37 +1483,37 @@
  *
  * PI0  - PIN0                      (analog).
  * PI1  - PIN1                      (analog).
- * PI2  - PIN2                      (analog).
- * PI3  - PIN3                      (analog).
- * PI4  - PIN4                      (analog).
- * PI5  - PIN5                      (analog).
- * PI6  - PIN6                      (analog).
- * PI7  - PIN7                      (analog).
- * PI8  - PIN8                      (analog).
- * PI9  - PIN9                      (analog).
- * PI10 - PIN10                     (analog).
- * PI11 - PIN11                     (analog).
- * PI12 - PIN12                     (analog).
- * PI13 - PIN13                     (analog).
- * PI14 - PIN14                     (analog).
- * PI15 - PIN15                     (analog).
+ * PI2  - PIN2                      (input floating).
+ * PI3  - PIN3                      (input floating).
+ * PI4  - PIN4                      (input floating).
+ * PI5  - PIN5                      (input floating).
+ * PI6  - PIN6                      (input floating).
+ * PI7  - PIN7                      (input floating).
+ * PI8  - PIN8                      (input floating).
+ * PI9  - PIN9                      (input floating).
+ * PI10 - PIN10                     (input floating).
+ * PI11 - PIN11                     (input floating).
+ * PI12 - PIN12                     (input floating).
+ * PI13 - PIN13                     (input floating).
+ * PI14 - PIN14                     (input floating).
+ * PI15 - PIN15                     (input floating).
  */
 #define VAL_GPIOI_MODER             (PIN_MODE_ANALOG(GPIOI_PIN0) |          \
                                      PIN_MODE_ANALOG(GPIOI_PIN1) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN2) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN3) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN4) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN5) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN6) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN7) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN8) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN9) |          \
-                                     PIN_MODE_ANALOG(GPIOI_PIN10) |         \
-                                     PIN_MODE_ANALOG(GPIOI_PIN11) |         \
-                                     PIN_MODE_ANALOG(GPIOI_PIN12) |         \
-                                     PIN_MODE_ANALOG(GPIOI_PIN13) |         \
-                                     PIN_MODE_ANALOG(GPIOI_PIN14) |         \
-                                     PIN_MODE_ANALOG(GPIOI_PIN15))
+                                     PIN_MODE_INPUT(GPIOI_PIN2) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN3) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN4) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN5) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN6) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN7) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN8) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN9) |           \
+                                     PIN_MODE_INPUT(GPIOI_PIN10) |          \
+                                     PIN_MODE_INPUT(GPIOI_PIN11) |          \
+                                     PIN_MODE_INPUT(GPIOI_PIN12) |          \
+                                     PIN_MODE_INPUT(GPIOI_PIN13) |          \
+                                     PIN_MODE_INPUT(GPIOI_PIN14) |          \
+                                     PIN_MODE_INPUT(GPIOI_PIN15))
 #define VAL_GPIOI_OTYPER            (PIN_OTYPE_PUSHPULL(GPIOI_PIN0) |       \
                                      PIN_OTYPE_PUSHPULL(GPIOI_PIN1) |       \
                                      PIN_OTYPE_PUSHPULL(GPIOI_PIN2) |       \

@@ -13,49 +13,23 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Dec 2021)//
-/////////////////////////////////////////////////////////////////
+#include "AP_Proximity_config.h"
 
+#if AP_PROXIMITY_TERARANGERTOWER_ENABLED
 
 #include "AP_Proximity_TeraRangerTower.h"
-#include <AP_SerialManager/AP_SerialManager.h>
+
+#include <AP_HAL/AP_HAL.h>
 #include <AP_Math/crc.h>
 #include <ctype.h>
 #include <stdio.h>
 
 extern const AP_HAL::HAL& hal;
 
-/*
-   The constructor also initialises the proximity sensor. Note that this
-   constructor is not called until detect() returns true, so we
-   already know that we should setup the proximity sensor
-*/
-AP_Proximity_TeraRangerTower::AP_Proximity_TeraRangerTower(
-    AP_Proximity &_frontend,
-    AP_Proximity::Proximity_State &_state) :
-    AP_Proximity_Backend(_frontend, _state)
-{
-    const AP_SerialManager &serial_manager = AP::serialmanager();
-
-    uart = serial_manager.find_serial(AP_SerialManager::SerialProtocol_Lidar360, 0);
-    if (uart != nullptr) {
-        uart->begin(serial_manager.find_baudrate(AP_SerialManager::SerialProtocol_Lidar360, 0));
-    }
-}
-
-// detect if a TeraRanger Tower proximity sensor is connected by looking for a configured serial port
-bool AP_Proximity_TeraRangerTower::detect()
-{
-    AP_HAL::UARTDriver *uart = nullptr;
-    uart = AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_Lidar360, 0);
-    return uart != nullptr;
-}
-
 // update the state of the sensor
 void AP_Proximity_TeraRangerTower::update(void)
 {
-    if (uart == nullptr) {
+    if (_uart == nullptr) {
         return;
     }
 
@@ -73,8 +47,7 @@ void AP_Proximity_TeraRangerTower::update(void)
 // get maximum and minimum distances (in meters) of primary sensor
 float AP_Proximity_TeraRangerTower::distance_max() const
 {
-   // return 4.5f;
-   return 100.0f; //modified for use with mr72 obstacle avoidance radar user manual 
+    return 4.5f;
 }
 float AP_Proximity_TeraRangerTower::distance_min() const
 {
@@ -84,16 +57,19 @@ float AP_Proximity_TeraRangerTower::distance_min() const
 // check for replies from sensor, returns true if at least one message was processed
 bool AP_Proximity_TeraRangerTower::read_sensor_data()
 {
-    if (uart == nullptr) {
+    if (_uart == nullptr) {
         return false;
     }
 
     uint16_t message_count = 0;
-    int16_t nbytes = uart->available();
+    int16_t nbytes = _uart->available();
 
     while (nbytes-- > 0) {
-        char c = uart->read();
-        if (c == 'T' ) {
+        int16_t c = _uart->read();
+        if (c==-1) {
+            return false;
+        }
+        if (char(c) == 'T' ) {
             buffer_count = 0;
         }
 
@@ -122,13 +98,18 @@ bool AP_Proximity_TeraRangerTower::read_sensor_data()
 }
 
 // process reply
-void AP_Proximity_TeraRangerTower::update_sector_data(int16_t angle_deg, uint16_t distance_cm)
+void AP_Proximity_TeraRangerTower::update_sector_data(int16_t angle_deg, uint16_t distance_mm)
 {
-    const uint8_t sector = convert_angle_to_sector(angle_deg);
-    _angle[sector] = angle_deg;
-    _distance[sector] = ((float) distance_cm) / 1000;
-    _distance_valid[sector] = distance_cm != 0xffff;
+    // Get location on 3-D boundary based on angle to the object
+    const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
+    if ((distance_mm != 0xffff) && !ignore_reading(angle_deg, distance_mm * 0.001f, false)) {
+        frontend.boundary.set_face_attributes(face, angle_deg, ((float) distance_mm) / 1000, state.instance);
+        // update OA database
+        database_push(angle_deg, ((float) distance_mm) / 1000);
+    } else {
+        frontend.boundary.reset_face(face, state.instance);
+    }
     _last_distance_received_ms = AP_HAL::millis();
-    // update boundary used for avoidance
-    update_boundary_for_sector(sector, true);
 }
+
+#endif // AP_PROXIMITY_TERARANGERTOWER_ENABLED

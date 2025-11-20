@@ -42,8 +42,8 @@
 /**
  * @brief   Use OSAL delays.
  * @details If set to @p TRUE then delays are implemented using the
- *          thread-friendy delay function else a delay function must
- *          be provided extenally.
+ *          thread-friendly delay function else a delay function must
+ *          be provided externally.
  */
 #if !defined(SW_I2C_USE_OSAL_DELAY) || defined(__DOXYGEN__)
 #define SW_I2C_USE_OSAL_DELAY               TRUE
@@ -110,9 +110,9 @@ typedef uint8_t i2cflags_t;
 typedef void (*i2c_delay_t)(void);
 
 /**
- * @brief   Type of I2C driver configuration structure.
+ * @brief   I2C driver configuration structure.
  */
-typedef struct {
+struct hal_i2c_config {
   /**
    * @brief   10 bits addressing switch.
    */
@@ -136,17 +136,22 @@ typedef struct {
    */
   i2c_delay_t               delay;
 #endif
-} I2CConfig;
+};
+
+/**
+ * @brief   Type of a structure representing an I2C configuration.
+ */
+typedef struct hal_i2c_config I2CConfig;
 
 /**
  * @brief   Type of a structure representing an I2C driver.
  */
-typedef struct I2CDriver I2CDriver;
+typedef struct hal_i2c_driver I2CDriver;
 
 /**
  * @brief   Structure representing an I2C driver.
  */
-struct I2CDriver {
+struct hal_i2c_driver {
   /**
    * @brief   Driver state.
    */
@@ -218,10 +223,10 @@ extern "C" {
   msg_t i2c_lld_master_transmit_timeout(I2CDriver *i2cp, i2caddr_t addr,
                                         const uint8_t *txbuf, size_t txbytes,
                                         uint8_t *rxbuf, size_t rxbytes,
-                                        systime_t timeout);
+                                        sysinterval_t timeout);
   msg_t i2c_lld_master_receive_timeout(I2CDriver *i2cp, i2caddr_t addr,
                                        uint8_t *rxbuf, size_t rxbytes,
-                                       systime_t timeout);
+                                       sysinterval_t timeout);
 #ifdef __cplusplus
 }
 #endif

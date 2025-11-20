@@ -27,19 +27,21 @@
  * and DroneCAN
  */
 
-#include "AP_OpenDroneID.h"
+#include "AP_OpenDroneID_config.h"
 
 #if AP_OPENDRONEID_ENABLED
 
-#define IGNORE_RESULT(e) do { if (e) {} } while(0)
-
+#include "AP_OpenDroneID.h"
 #include <AP_HAL/AP_HAL.h>
-#include <GCS_MAVLink/GCS.h>
-#include <GCS_MAVLink/GCS_MAVLink.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_GPS/AP_GPS.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_AHRS/AP_AHRS.h>
+#include <AP_Parachute/AP_Parachute.h>
+#include <AP_Vehicle/AP_Vehicle.h>
+#include <AP_DroneCAN/AP_DroneCAN.h>
+#include <stdio.h>
+#include <GCS_MAVLink/GCS.h>
 
 extern const AP_HAL::HAL &hal;
 
@@ -65,8 +67,8 @@ const AP_Param::GroupInfo AP_OpenDroneID::var_info[] = {
     
     // @Param: OPTIONS
     // @DisplayName: OpenDroneID options
-    // @Description: Options for OpenDroneID subsystem. Bit 0 means to enforce arming checks
-    // @Bitmask: 0:EnforceArming
+    // @Description: Options for OpenDroneID subsystem
+    // @Bitmask: 0:EnforceArming, 1:AllowNonGPSPosition, 2:LockUASIDOnFirstBasicIDRx
     AP_GROUPINFO("OPTIONS", 4, AP_OpenDroneID, _options, 0),
 
     // @Param: BARO_ACC
@@ -78,6 +80,13 @@ const AP_Param::GroupInfo AP_OpenDroneID::var_info[] = {
 
     AP_GROUPEND
 };
+
+#if defined(OPENDRONEID_UA_TYPE)
+// ensure the type is within the allowed range
+#if OPENDRONEID_UA_TYPE < 0 || OPENDRONEID_UA_TYPE > 15
+#error "OPENDRONEID_UA_TYPE must be between 0 and 15"
+#endif
+#endif
 
 // constructor
 AP_OpenDroneID::AP_OpenDroneID()
@@ -97,7 +106,54 @@ void AP_OpenDroneID::init()
         return;
     }
 
+    load_UAS_ID_from_persistent_memory();
     _chan = mavlink_channel_t(gcs().get_channel_from_port_number(_mav_port));
+    _initialised = true;
+}
+
+void AP_OpenDroneID::load_UAS_ID_from_persistent_memory()
+{
+    id_len = sizeof(id_str);
+    size_t id_type_len = sizeof(id_type);
+    size_t ua_type_len = sizeof(ua_type);
+    if (hal.util->get_persistent_param_by_name("DID_UAS_ID", id_str, id_len) &&
+        hal.util->get_persistent_param_by_name("DID_UAS_ID_TYPE", id_type, id_type_len) &&
+        hal.util->get_persistent_param_by_name("DID_UA_TYPE", ua_type, ua_type_len)) {
+        if (id_len && id_type_len && ua_type_len) {
+            _options.set_and_save(_options.get() & ~LockUASIDOnFirstBasicIDRx);
+            _options.notify();
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "OpenDroneID: Locked UAS_ID: %s", id_str);
+        }
+    } else {
+        id_len = 0;
+    }
+}
+
+void AP_OpenDroneID::set_basic_id() {
+    if (pkt_basic_id.id_type != MAV_ODID_ID_TYPE_NONE) {
+        return;
+    }
+    if (id_len > 0) {
+        // prepare basic id pkt
+        uint8_t val = gcs().sysid_this_mav();
+        pkt_basic_id.target_system = val;
+        pkt_basic_id.target_component = MAV_COMP_ID_ODID_TXRX_1;
+        pkt_basic_id.id_type = atoi(id_type);
+        pkt_basic_id.ua_type = atoi(ua_type);
+        char buffer[21];
+        snprintf(buffer, sizeof(buffer), "%s", id_str);
+        memcpy(pkt_basic_id.uas_id, buffer, sizeof(pkt_basic_id.uas_id));
+    }
+}
+
+void AP_OpenDroneID::get_persistent_params(ExpandingString &str) const
+{
+    if ((pkt_basic_id.id_type == MAV_ODID_ID_TYPE_SERIAL_NUMBER)
+        && (_options & LockUASIDOnFirstBasicIDRx)
+        && id_len == 0) {
+        GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "OpenDroneID: ID is locked as %s", pkt_basic_id.uas_id);
+        str.printf("DID_UAS_ID=%s\nDID_UAS_ID_TYPE=%u\nDID_UA_TYPE=%u\n", pkt_basic_id.uas_id, pkt_basic_id.id_type, pkt_basic_id.ua_type);
+    }
 }
 
 // Perform the pre-arm checks and prevent arming if they are not satisifed
@@ -110,12 +166,10 @@ bool AP_OpenDroneID::pre_arm_check(char* failmsg, uint8_t failmsg_len)
         return true;
     }
 
-    //this is being handled from the module side, so I don't think we need to worry about it in PV
-    
-    //if (pkt_basic_id.id_type == MAV_ODID_ID_TYPE_NONE) {
-      //  strncpy(failmsg, "UA_TYPE required in BasicID", failmsg_len);
-       // return false;
-    //}
+    if (pkt_basic_id.id_type == MAV_ODID_ID_TYPE_NONE) {
+        strncpy(failmsg, "UA_TYPE required in BasicID", failmsg_len);
+        return false;
+    }
 
     if (pkt_system.operator_latitude == 0 && pkt_system.operator_longitude == 0) {
         strncpy(failmsg, "operator location must be set", failmsg_len);
@@ -137,7 +191,7 @@ bool AP_OpenDroneID::pre_arm_check(char* failmsg, uint8_t failmsg_len)
         return false;
     }
     
-    if (arm_status.status != MAV_ODID_GOOD_TO_ARM) {
+    if (arm_status.status != MAV_ODID_ARM_STATUS_GOOD_TO_ARM) {
         strncpy(failmsg, arm_status.error, failmsg_len);
         return false;
     }
@@ -151,15 +205,41 @@ void AP_OpenDroneID::update()
         return;
     }
 
+    if ((pkt_basic_id.id_type == MAV_ODID_ID_TYPE_SERIAL_NUMBER)
+        && (_options & LockUASIDOnFirstBasicIDRx)
+        && id_len == 0
+        && !bootloader_flashed) {
+        hal.util->flash_bootloader();
+        // reset the basic id on next set_basic_id call
+        pkt_basic_id.id_type = MAV_ODID_ID_TYPE_NONE;
+        bootloader_flashed = true;
+    }
+
+    set_basic_id();
+
     const bool armed = hal.util->get_soft_armed();
     if (armed && !_was_armed) {
         // use arm location as takeoff location
-        IGNORE_RESULT(AP::ahrs().get_position(_takeoff_location));
+        AP::ahrs().get_location(_takeoff_location);
     }
     _was_armed = armed;
 
     send_dynamic_out();
     send_static_out();
+#if HAL_ENABLE_DRONECAN_DRIVERS
+    uint8_t can_num_drivers = AP::can().get_num_drivers();
+    for (uint8_t i = 0; i < can_num_drivers; i++) {
+        AP_DroneCAN *dronecan = AP_DroneCAN::get_dronecan(i);
+        if (dronecan == nullptr) {
+            continue;
+        }
+        if (dronecan->get_driver_index()+1 != _can_driver) {
+            continue;
+        }
+        // send messages
+        dronecan_send(dronecan);
+    }
+#endif
 }
 
 // local payload space check which treats invalid channel as having space
@@ -186,46 +266,25 @@ void AP_OpenDroneID::send_dynamic_out()
 void AP_OpenDroneID::send_static_out()
 {
     const uint32_t now_ms = AP_HAL::millis();
-    if(last_pv_status_refresh == 0){
-        last_pv_status_refresh = now_ms; 
-    }
 
-   bool handled = false; 
     // we need to notify user if we lost the transmitter
     if (now_ms - last_arm_status_ms > 5000) {
         if (now_ms - last_lost_tx_ms > 5000) {
             last_lost_tx_ms = now_ms;
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "ODID: lost transmitter");
-            handled = true; 
         }
     } else if (last_lost_tx_ms != 0) {
         // we're OK again
         last_lost_tx_ms = 0;
-        last_pv_status_refresh = now_ms; 
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "ODID: transmitter OK");
-        handled = true; 
     }
 
     // we need to notify user if we lost system msg with operator location
     if (now_ms - last_system_ms > 5000 && now_ms - last_lost_operator_msg_ms > 5000) {
         last_lost_operator_msg_ms = now_ms;
-        _hadLostOperatorLocation = true;
-        last_pv_status_refresh = now_ms; 
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "ODID: lost operator location");
-        handled = true; 
     }
-    else if(!handled && (now_ms - last_pv_status_refresh > 30000))
-    {
-        //send a refresh message
-        last_pv_status_refresh = now_ms; 
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "ODID: transmitter OK");
-     }
     
-    //if we are here, then we should have OK status
-
-    
-
-
     const uint32_t msg_spacing_ms = _mavlink_static_period_ms / 4;
     if (now_ms - last_msg_send_ms >= msg_spacing_ms) {
         // allow update of channel during setup, this makes it easy to debug with a GCS
@@ -277,12 +336,42 @@ void AP_OpenDroneID::send_location_message()
 
     const AP_GPS::GPS_Status gps_status = gps.status();
     const bool got_bad_gps_fix = (gps_status < AP_GPS::GPS_Status::GPS_OK_FIX_3D);
+    const bool armed = hal.util->get_soft_armed();
 
     Location current_location;
-    if (!ahrs.get_position(current_location)) {
+    if (!ahrs.get_location(current_location)) {
         return;
     }
-    const uint8_t uav_status = hal.util->get_soft_armed()? MAV_ODID_STATUS_AIRBORNE : MAV_ODID_STATUS_GROUND;
+    uint8_t uav_status = hal.util->get_soft_armed()? MAV_ODID_STATUS_AIRBORNE : MAV_ODID_STATUS_GROUND;
+#if HAL_PARACHUTE_ENABLED
+    // set emergency status if chute is released
+    const auto *parachute = AP::parachute();
+    if (parachute != nullptr && parachute->released()) {
+        uav_status = MAV_ODID_STATUS_EMERGENCY;
+    }
+#endif
+    if (AP::vehicle()->is_crashed()) {
+        // if in crashed state also declare an emergency
+        uav_status = MAV_ODID_STATUS_EMERGENCY;
+    }
+
+    // if we are armed with no GPS fix and we haven't specifically
+    // allowed for non-GPS operation then declare an emergency
+    if (got_bad_gps_fix && armed && !option_enabled(Options::AllowNonGPSPosition)) {
+        uav_status = MAV_ODID_STATUS_EMERGENCY;
+    }
+
+    // if we are disarmed and falling at over 3m/s then declare an
+    // emergency. This covers cases such as deliberate crash with
+    // advanced failsafe and an unintended reboot or in-flight disarm
+    if (!got_bad_gps_fix && !armed && gps.velocity().z > 3.0) {
+        uav_status = MAV_ODID_STATUS_EMERGENCY;
+    }
+
+    // if we have watchdogged while armed then declare an emergency
+    if (hal.util->was_watchdog_armed()) {
+        uav_status = MAV_ODID_STATUS_EMERGENCY;
+    }
 
     float direction = ODID_INV_DIR;
     if (!got_bad_gps_fix) {
@@ -308,15 +397,13 @@ void AP_OpenDroneID::send_location_message()
 
     float altitude_geodetic = -1000;
     int32_t alt_amsl_cm;
+    float undulation;
     if (current_location.get_alt_cm(Location::AltFrame::ABSOLUTE, alt_amsl_cm)) {
         altitude_geodetic = alt_amsl_cm * 0.01;
     }
-#if 0
-    float undulation;
     if (gps.get_undulation(undulation)) {
         altitude_geodetic -= undulation;
     }
-#endif
 
     // Compute the current height above the takeoff location
     float height_above_takeoff = 0;     // height above takeoff (meters)
@@ -467,7 +554,7 @@ void AP_OpenDroneID::send_operator_id_message()
 */
 MAV_ODID_HOR_ACC AP_OpenDroneID::create_enum_horizontal_accuracy(float accuracy) const
 {
-    // Out of bounds return UKNOWN flag
+    // Out of bounds return UNKNOWN flag
     if (accuracy < 0.0 || accuracy >= 18520.0) {
         return MAV_ODID_HOR_ACC_UNKNOWN;
     }
@@ -508,7 +595,7 @@ MAV_ODID_HOR_ACC AP_OpenDroneID::create_enum_horizontal_accuracy(float accuracy)
 */
 MAV_ODID_VER_ACC AP_OpenDroneID::create_enum_vertical_accuracy(float accuracy) const
 {
-    // Out of bounds return UKNOWN flag
+    // Out of bounds return UNKNOWN flag
     if (accuracy < 0.0 || accuracy >= 150.0) {
         return MAV_ODID_VER_ACC_UNKNOWN;
     }
@@ -543,7 +630,7 @@ MAV_ODID_VER_ACC AP_OpenDroneID::create_enum_vertical_accuracy(float accuracy) c
 */
 MAV_ODID_SPEED_ACC AP_OpenDroneID::create_enum_speed_accuracy(float accuracy) const
 {
-    // Out of bounds return UKNOWN flag
+    // Out of bounds return UNKNOWN flag
     if (accuracy < 0.0 || accuracy >= 10.0) {
         return MAV_ODID_SPEED_ACC_UNKNOWN;
     }
@@ -570,7 +657,7 @@ MAV_ODID_SPEED_ACC AP_OpenDroneID::create_enum_speed_accuracy(float accuracy) co
 */
 MAV_ODID_TIME_ACC AP_OpenDroneID::create_enum_timestamp_accuracy(float accuracy) const
 {
-    // Out of bounds return UKNOWN flag
+    // Out of bounds return UNKNOWN flag
     if (accuracy < 0.0 || accuracy >= 1.5) {
         return MAV_ODID_TIME_ACC_UNKNOWN;
     }
@@ -652,6 +739,9 @@ float AP_OpenDroneID::create_location_timestamp(float timestamp) const
 // handle a message from the GCS
 void AP_OpenDroneID::handle_msg(mavlink_channel_t chan, const mavlink_message_t &msg)
 {
+    if (!_initialised) {
+        return;
+    }
     WITH_SEMAPHORE(_sem);
 
     switch (msg.msgid) {
@@ -671,19 +761,13 @@ void AP_OpenDroneID::handle_msg(mavlink_channel_t chan, const mavlink_message_t 
         mavlink_msg_open_drone_id_self_id_decode(&msg, &pkt_self_id);
         break;
     case MAVLINK_MSG_ID_OPEN_DRONE_ID_BASIC_ID:
-        mavlink_msg_open_drone_id_basic_id_decode(&msg, &pkt_basic_id);
+        if (id_len == 0) {
+            mavlink_msg_open_drone_id_basic_id_decode(&msg, &pkt_basic_id);
+        }
         break;
     case MAVLINK_MSG_ID_OPEN_DRONE_ID_SYSTEM:
         mavlink_msg_open_drone_id_system_decode(&msg, &pkt_system);
         last_system_ms = AP_HAL::millis();
-
-        if(_hadLostOperatorLocation){
-            //precisionVision hack to recover 
-            _hadLostOperatorLocation = false; 
-            last_pv_status_refresh = last_system_ms; 
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "ODID: transmitter OK");
-        }
-
         break;
     case MAVLINK_MSG_ID_OPEN_DRONE_ID_SYSTEM_UPDATE: {
         mavlink_open_drone_id_system_update_t pkt_system_update;

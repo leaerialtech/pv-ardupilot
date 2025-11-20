@@ -53,7 +53,17 @@ py_compile.compile(sys.argv[1], sys.argv[2], sys.argv[3], True)
 Piece of Python code used in :py:class:`waflib.Tools.python.pyo` and :py:class:`waflib.Tools.python.pyc` for byte-compiling python files
 """
 
-DISTUTILS_IMP = ['from distutils.sysconfig import get_config_var, get_python_lib']
+DISTUTILS_IMP = """
+try:
+	from distutils.sysconfig import get_config_var, get_python_lib
+except ImportError:
+	from sysconfig import get_config_var, get_path
+	def get_python_lib(*k, **kw):
+		keyword='platlib' if kw.get('plat_specific') else 'purelib'
+		if 'prefix' in kw:
+			return get_path(keyword, vars={'installed_base': kw['prefix'], 'platbase': kw['prefix']})
+		return get_path(keyword)
+""".splitlines()
 
 @before_method('process_source')
 @feature('py')
@@ -79,14 +89,19 @@ def process_py(self, node):
 	"""
 	Add signature of .py file, so it will be byte-compiled when necessary
 	"""
-	assert(hasattr(self, 'install_path')), 'add features="py"'
+	assert(hasattr(self, 'install_path')), 'add features="py" for target "%s" in "%s/wscript".' % (self.target, self.path.nice_path())
+	self.install_from = getattr(self, 'install_from', None)
+	relative_trick = getattr(self, 'relative_trick', True)
+	if self.install_from:
+		assert isinstance(self.install_from, Node.Node), \
+		'add features="py" for target "%s" in "%s/wscript" (%s).' % (self.target, self.path.nice_path(), type(self.install_from))
 
 	# where to install the python file
 	if self.install_path:
 		if self.install_from:
-			self.add_install_files(install_to=self.install_path, install_from=node, cwd=self.install_from, relative_trick=True)
+			self.add_install_files(install_to=self.install_path, install_from=node, cwd=self.install_from, relative_trick=relative_trick)
 		else:
-			self.add_install_files(install_to=self.install_path, install_from=node, relative_trick=True)
+			self.add_install_files(install_to=self.install_path, install_from=node, relative_trick=relative_trick)
 
 	lst = []
 	if self.env.PYC:
@@ -96,9 +111,11 @@ def process_py(self, node):
 
 	if self.install_path:
 		if self.install_from:
-			pyd = Utils.subst_vars("%s/%s" % (self.install_path, node.path_from(self.install_from)), self.env)
+			target_dir = node.path_from(self.install_from) if relative_trick else node.name
+			pyd = Utils.subst_vars("%s/%s" % (self.install_path, target_dir), self.env)
 		else:
-			pyd = Utils.subst_vars("%s/%s" % (self.install_path, node.path_from(self.path)), self.env)
+			target_dir = node.path_from(self.path) if relative_trick else node.name
+			pyd = Utils.subst_vars("%s/%s" % (self.install_path, target_dir), self.env)
 	else:
 		pyd = node.abspath()
 
@@ -115,7 +132,7 @@ def process_py(self, node):
 		tsk.pyd = pyd
 
 		if self.install_path:
-			self.add_install_files(install_to=os.path.dirname(pyd), install_from=pyobj, cwd=node.parent.get_bld(), relative_trick=True)
+			self.add_install_files(install_to=os.path.dirname(pyd), install_from=pyobj, cwd=node.parent.get_bld(), relative_trick=relative_trick)
 
 class pyc(Task.Task):
 	"""
@@ -212,7 +229,7 @@ def get_python_variables(self, variables, imports=None):
 	try:
 		out = self.cmd_and_log(self.env.PYTHON + ['-c', '\n'.join(program)], env=os_env)
 	except Errors.WafError:
-		self.fatal('The distutils module is unusable: install "python-devel"?')
+		self.fatal('Could not run %r' % self.env.PYTHON)
 	self.to_log(out)
 	return_values = []
 	for s in out.splitlines():
@@ -284,7 +301,8 @@ def python_cross_compile(self, features='pyembed pyext'):
 @conf
 def check_python_headers(conf, features='pyembed pyext'):
 	"""
-	Check for headers and libraries necessary to extend or embed python by using the module *distutils*.
+	Check for headers and libraries necessary to extend or embed python.
+	It may use the module *distutils* or sysconfig in newer Python versions.
 	On success the environment variables xxx_PYEXT and xxx_PYEMBED are added:
 
 	* PYEXT: for compiling python extensions
@@ -308,7 +326,7 @@ def check_python_headers(conf, features='pyembed pyext'):
 		conf.fatal('Could not find the python executable')
 
 	# so we actually do all this for compatibility reasons and for obtaining pyext_PATTERN below
-	v = 'prefix SO LDFLAGS LIBDIR LIBPL INCLUDEPY Py_ENABLE_SHARED MACOSX_DEPLOYMENT_TARGET LDSHARED CFLAGS LDVERSION'.split()
+	v = 'prefix SO EXT_SUFFIX LDFLAGS LIBDIR LIBPL INCLUDEPY Py_ENABLE_SHARED MACOSX_DEPLOYMENT_TARGET LDSHARED CFLAGS LDVERSION'.split()
 	try:
 		lst = conf.get_python_variables(["get_config_var('%s') or ''" % x for x in v])
 	except RuntimeError:
@@ -320,8 +338,8 @@ def check_python_headers(conf, features='pyembed pyext'):
 	dct = dict(zip(v, lst))
 	x = 'MACOSX_DEPLOYMENT_TARGET'
 	if dct[x]:
-		env[x] = conf.environ[x] = dct[x]
-	env.pyext_PATTERN = '%s' + dct['SO'] # not a mistake
+		env[x] = conf.environ[x] = str(dct[x])
+	env.pyext_PATTERN = '%s' + (dct['EXT_SUFFIX'] or dct['SO']) # SO is deprecated in 3.5 and removed in 3.11
 
 
 	# Try to get pythonX.Y-config
@@ -329,6 +347,10 @@ def check_python_headers(conf, features='pyembed pyext'):
 	conf.find_program([''.join(pybin) + '-config', 'python%s-config' % num, 'python-config-%s' % num, 'python%sm-config' % num], var='PYTHON_CONFIG', msg="python-config", mandatory=False)
 
 	if env.PYTHON_CONFIG:
+		# check python-config output only once
+		if conf.env.HAVE_PYTHON_H:
+			return
+
 		# python2.6-config requires 3 runs
 		all_flags = [['--cflags', '--libs', '--ldflags']]
 		if sys.hexversion < 0x2070000:
@@ -338,7 +360,13 @@ def check_python_headers(conf, features='pyembed pyext'):
 
 		if 'pyembed' in features:
 			for flags in all_flags:
-				conf.check_cfg(msg='Asking python-config for pyembed %r flags' % ' '.join(flags), path=env.PYTHON_CONFIG, package='', uselib_store='PYEMBED', args=flags)
+				# Python 3.8 has different flags for pyembed, needs --embed
+				embedflags = flags + ['--embed']
+				try:
+					conf.check_cfg(msg='Asking python-config for pyembed %r flags' % ' '.join(embedflags), path=env.PYTHON_CONFIG, package='', uselib_store='PYEMBED', args=embedflags)
+				except conf.errors.ConfigurationError:
+					# However Python < 3.8 doesn't accept --embed, so we need a fallback
+					conf.check_cfg(msg='Asking python-config for pyembed %r flags' % ' '.join(flags), path=env.PYTHON_CONFIG, package='', uselib_store='PYEMBED', args=flags)
 
 			try:
 				conf.test_pyembed(xx)
@@ -399,8 +427,13 @@ def check_python_headers(conf, features='pyembed pyext'):
 
 		if not result:
 			path = [os.path.join(dct['prefix'], "libs")]
-			conf.to_log("\n\n# try again with -L$prefix/libs, and pythonXY name rather than pythonX.Y (win32)\n")
+			conf.to_log("\n\n# try again with -L$prefix/libs, and pythonXY rather than pythonX.Y (win32)\n")
 			result = conf.check(lib=name, uselib='PYEMBED', libpath=path, mandatory=False, msg='Checking for library %s in $prefix/libs' % name)
+
+		if not result:
+			path = [os.path.normpath(os.path.join(dct['INCLUDEPY'], '..', 'libs'))]
+			conf.to_log("\n\n# try again with -L$INCLUDEPY/../libs, and pythonXY rather than pythonX.Y (win32)\n")
+			result = conf.check(lib=name, uselib='PYEMBED', libpath=path, mandatory=False, msg='Checking for library %s in $INCLUDEPY/../libs' % name)
 
 		if result:
 			break # do not forget to set LIBPATH_PYEMBED
@@ -417,28 +450,34 @@ def check_python_headers(conf, features='pyembed pyext'):
 		env.LIBPATH_PYEXT = env.LIBPATH_PYEMBED
 		env.LIB_PYEXT = env.LIB_PYEMBED
 
-	conf.to_log("Include path for Python extensions (found via distutils module): %r\n" % (dct['INCLUDEPY'],))
+	conf.to_log("Found an include path for Python extensions: %r\n" % (dct['INCLUDEPY'],))
 	env.INCLUDES_PYEXT = [dct['INCLUDEPY']]
 	env.INCLUDES_PYEMBED = [dct['INCLUDEPY']]
 
 	# Code using the Python API needs to be compiled with -fno-strict-aliasing
 	if env.CC_NAME == 'gcc':
-		env.append_value('CFLAGS_PYEMBED', ['-fno-strict-aliasing'])
-		env.append_value('CFLAGS_PYEXT', ['-fno-strict-aliasing'])
+		env.append_unique('CFLAGS_PYEMBED', ['-fno-strict-aliasing'])
+		env.append_unique('CFLAGS_PYEXT', ['-fno-strict-aliasing'])
 	if env.CXX_NAME == 'gcc':
-		env.append_value('CXXFLAGS_PYEMBED', ['-fno-strict-aliasing'])
-		env.append_value('CXXFLAGS_PYEXT', ['-fno-strict-aliasing'])
+		env.append_unique('CXXFLAGS_PYEMBED', ['-fno-strict-aliasing'])
+		env.append_unique('CXXFLAGS_PYEXT', ['-fno-strict-aliasing'])
 
 	if env.CC_NAME == "msvc":
-		from distutils.msvccompiler import MSVCCompiler
-		dist_compiler = MSVCCompiler()
-		dist_compiler.initialize()
-		env.append_value('CFLAGS_PYEXT', dist_compiler.compile_options)
-		env.append_value('CXXFLAGS_PYEXT', dist_compiler.compile_options)
-		env.append_value('LINKFLAGS_PYEXT', dist_compiler.ldflags_shared)
+		try:
+			from distutils.msvccompiler import MSVCCompiler
+		except ImportError:
+			# From https://github.com/python/cpython/blob/main/Lib/distutils/msvccompiler.py
+			env.append_value('CFLAGS_PYEXT', [ '/nologo', '/Ox', '/MD', '/W3', '/GX', '/DNDEBUG'])
+			env.append_value('CXXFLAGS_PYEXT', [ '/nologo', '/Ox', '/MD', '/W3', '/GX', '/DNDEBUG'])
+			env.append_value('LINKFLAGS_PYEXT', ['/DLL', '/nologo', '/INCREMENTAL:NO'])
+		else:
+			dist_compiler = MSVCCompiler()
+			dist_compiler.initialize()
+			env.append_value('CFLAGS_PYEXT', dist_compiler.compile_options)
+			env.append_value('CXXFLAGS_PYEXT', dist_compiler.compile_options)
+			env.append_value('LINKFLAGS_PYEXT', dist_compiler.ldflags_shared)
 
-	# See if it compiles
-	conf.check(header_name='Python.h', define_name='HAVE_PYTHON_H', uselib='PYEMBED', fragment=FRAG, errmsg='Distutils not installed? Broken python installation? Get python-config now!')
+	conf.check(header_name='Python.h', define_name='HAVE_PYTHON_H', uselib='PYEMBED', fragment=FRAG, errmsg='Could not build a Python embedded interpreter')
 
 @conf
 def check_python_version(conf, minver=None):
@@ -484,17 +523,9 @@ def check_python_version(conf, minver=None):
 		else:
 			# Finally, try to guess
 			if Utils.is_win32:
-				(python_LIBDEST, pydir) = conf.get_python_variables(
-					  ["get_config_var('LIBDEST') or ''",
-					   "get_python_lib(standard_lib=0) or ''"])
+				(pydir,) = conf.get_python_variables(["get_python_lib(standard_lib=0) or ''"])
 			else:
-				python_LIBDEST = None
-				(pydir,) = conf.get_python_variables( ["get_python_lib(standard_lib=0, prefix=%r) or ''" % conf.env.PREFIX])
-			if python_LIBDEST is None:
-				if conf.env.LIBDIR:
-					python_LIBDEST = os.path.join(conf.env.LIBDIR, 'python' + pyver)
-				else:
-					python_LIBDEST = os.path.join(conf.env.PREFIX, 'lib', 'python' + pyver)
+				(pydir,) = conf.get_python_variables(["get_python_lib(standard_lib=0, prefix=%r) or ''" % conf.env.PREFIX])
 
 		if 'PYTHONARCHDIR' in conf.env:
 			# Check if --pythonarchdir was specified
@@ -504,7 +535,7 @@ def check_python_version(conf, minver=None):
 			pyarchdir = conf.environ['PYTHONARCHDIR']
 		else:
 			# Finally, try to guess
-			(pyarchdir, ) = conf.get_python_variables( ["get_python_lib(plat_specific=1, standard_lib=0, prefix=%r) or ''" % conf.env.PREFIX])
+			(pyarchdir, ) = conf.get_python_variables(["get_python_lib(plat_specific=1, standard_lib=0, prefix=%r) or ''" % conf.env.PREFIX])
 			if not pyarchdir:
 				pyarchdir = pydir
 
@@ -563,13 +594,12 @@ def check_python_module(conf, module_name, condition=''):
 		if ret == 'unknown version':
 			conf.fatal('Could not check the %s version' % module_name)
 
-		from distutils.version import LooseVersion
 		def num(*k):
 			if isinstance(k[0], int):
-				return LooseVersion('.'.join([str(x) for x in k]))
+				return Utils.loose_version('.'.join([str(x) for x in k]))
 			else:
-				return LooseVersion(k[0])
-		d = {'num': num, 'ver': LooseVersion(ret)}
+				return Utils.loose_version(k[0])
+		d = {'num': num, 'ver': Utils.loose_version(ret)}
 		ev = eval(condition, {}, d)
 		if not ev:
 			conf.fatal('The %s version does not satisfy the requirements' % module_name)
@@ -603,7 +633,7 @@ def configure(conf):
 	v.PYO = getattr(Options.options, 'pyo', 1)
 
 	try:
-		v.PYTAG = conf.cmd_and_log(conf.env.PYTHON + ['-c', "import imp;print(imp.get_tag())"]).strip()
+		v.PYTAG = conf.cmd_and_log(conf.env.PYTHON + ['-c', "import sys\ntry:\n print(sys.implementation.cache_tag)\nexcept AttributeError:\n import imp\n print(imp.get_tag())\n"]).strip()
 	except Errors.WafError:
 		pass
 

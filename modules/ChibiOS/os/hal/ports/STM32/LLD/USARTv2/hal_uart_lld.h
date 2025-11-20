@@ -133,14 +133,6 @@
 #endif
 
 /**
- * @brief   USART3..8 interrupt priority level setting.
- * @note    Only valid on those devices with a shared IRQ.
- */
-#if !defined(STM32_UART_USART3_8_IRQ_PRIORITY) || defined(__DOXYGEN__)
-#define STM32_UART_USART3_8_IRQ_PRIORITY    12
-#endif
-
-/**
  * @brief   UART4 interrupt priority level setting.
  */
 #if !defined(STM32_UART_UART4_IRQ_PRIORITY) || defined(__DOXYGEN__)
@@ -304,58 +296,53 @@
 #error "UART driver activated but no USART/UART peripheral assigned"
 #endif
 
-#if STM32_UART_USE_USART1 &&                                                \
+#if !defined(STM32_USART1_SUPPRESS_ISR) &&                                  \
+    STM32_UART_USE_USART1 &&                                                \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_USART1_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to USART1"
 #endif
 
-#if STM32_UART_USE_USART2 &&                                                \
+#if !defined(STM32_USART2_SUPPRESS_ISR) &&                                  \
+    STM32_UART_USE_USART2 &&                                                \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_USART2_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to USART2"
 #endif
 
-#if defined(STM32_USART3_8_HANDLER)
-
-#if (STM32_UART_USE_USART3 || STM32_UART_USE_UART4  ||                      \
-     STM32_UART_USE_UART5  || STM32_UART_USE_USART6 ||                      \
-     STM32_UART_USE_UART7  || STM32_UART_USE_UART8) &&                      \
-     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART3_8_PRIORITY)
-#error "Invalid IRQ priority assigned to USART3..8"
-#endif
-
-#else /* !defined(STM32_USART3_8_HANDLER) */
-
-#if STM32_UART_USE_USART3 &&                                                \
+#if !defined(STM32_USART3_SUPPRESS_ISR) &&                                  \
+    STM32_UART_USE_USART3 &&                                                \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_USART3_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to USART3"
 #endif
 
-#if STM32_UART_USE_UART4 &&                                                 \
+#if !defined(STM32_UART4_SUPPRESS_ISR) &&                                   \
+    STM32_UART_USE_UART4 &&                                                 \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_UART4_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to UART4"
 #endif
 
-#if STM32_UART_USE_UART5 &&                                                 \
+#if !defined(STM32_UART5_SUPPRESS_ISR) &&                                   \
+    STM32_UART_USE_UART5 &&                                                 \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_UART5_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to UART5"
 #endif
 
-#if STM32_UART_USE_USART6 &&                                                \
+#if !defined(STM32_USART6_SUPPRESS_ISR) &&                                  \
+    STM32_UART_USE_USART6 &&                                                \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_USART6_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to USART6"
 #endif
 
-#if STM32_UART_USE_UART7 &&                                                 \
+#if !defined(STM32_UART7_SUPPRESS_ISR) &&                                   \
+    STM32_UART_USE_UART7 &&                                                 \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_UART7_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to UART7"
 #endif
 
-#if STM32_UART_USE_UART8 &&                                                \
+#if !defined(STM32_UART8_SUPPRESS_ISR) &&                                   \
+    STM32_UART_USE_UART8 &&                                                 \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_UART_UART8_IRQ_PRIORITY)
 #error "Invalid IRQ priority assigned to UART8"
 #endif
-
-#endif /* !defined(STM32_USART3_8_HANDLER) */
 
 /* Check on DMA priorities.*/
 #if STM32_UART_USE_USART1 &&                                                \
@@ -626,6 +613,71 @@
 #define STM32_DMA_REQUIRED
 #endif
 
+/* Checks on allocation of USARTx units.*/
+#if STM32_UART_USE_USART1
+#if defined(STM32_USART1_IS_USED)
+#error "UARTD1 requires USART1 but it is already used"
+#else
+#define STM32_USART1_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_USART2
+#if defined(STM32_USART2_IS_USED)
+#error "UARTD2 requires USART2 but it is already used"
+#else
+#define STM32_USART2_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_USART3
+#if defined(STM32_USART3_IS_USED)
+#error "UARTD3 requires USART3 but it is already used"
+#else
+#define STM32_USART3_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_UART4
+#if defined(STM32_UART4_IS_USED)
+#error "UARTD4 requires UART4 but it is already used"
+#else
+#define STM32_UART4_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_UART5
+#if defined(STM32_UART5_IS_USED)
+#error "UARTD5 requires UART5 but it is already used"
+#else
+#define STM32_UART5_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_USART6
+#if defined(STM32_USART6_IS_USED)
+#error "UARTD6 requires USART6 but it is already used"
+#else
+#define STM32_USART6_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_UART7
+#if defined(STM32_UART7_IS_USED)
+#error "UARTD7 requires UART7 but it is already used"
+#else
+#define STM32_UART7_IS_USED
+#endif
+#endif
+
+#if STM32_UART_USE_UART8
+#if defined(STM32_UART8_IS_USED)
+#error "UARTD8 requires UART8 but it is already used"
+#else
+#define STM32_UART8_IS_USED
+#endif
+#endif
+
 /*===========================================================================*/
 /* Driver data structures and types.                                         */
 /*===========================================================================*/
@@ -636,9 +688,9 @@
 typedef uint32_t uartflags_t;
 
 /**
- * @brief   Structure representing an UART driver.
+ * @brief   Type of an UART driver.
  */
-typedef struct UARTDriver UARTDriver;
+typedef struct hal_uart_driver UARTDriver;
 
 /**
  * @brief   Generic UART notification callback type.
@@ -664,10 +716,10 @@ typedef void (*uartccb_t)(UARTDriver *uartp, uint16_t c);
 typedef void (*uartecb_t)(UARTDriver *uartp, uartflags_t e);
 
 /**
- * @brief   Driver configuration structure.
+ * @brief   Type of an UART configuration structure.
  * @note    It could be empty on some architectures.
  */
-typedef struct {
+typedef struct hal_uart_config {
   /**
    * @brief   End of transmission buffer callback.
    */
@@ -722,7 +774,7 @@ typedef struct {
 /**
  * @brief   Structure representing an UART driver.
  */
-struct UARTDriver {
+struct hal_uart_driver {
   /**
    * @brief   Driver state.
    */
@@ -772,9 +824,13 @@ struct UARTDriver {
    */
   uint32_t                  clock;
   /**
-   * @brief   DMA mode bit mask.
+   * @brief   Receive DMA mode bit mask.
    */
-  uint32_t                  dmamode;
+  uint32_t                  dmarxmode;
+  /**
+   * @brief   Send DMA mode bit mask.
+   */
+  uint32_t                  dmatxmode;
   /**
    * @brief   Receive DMA channel.
    */
@@ -839,6 +895,7 @@ extern "C" {
   size_t uart_lld_stop_send(UARTDriver *uartp);
   void uart_lld_start_receive(UARTDriver *uartp, size_t n, void *rxbuf);
   size_t uart_lld_stop_receive(UARTDriver *uartp);
+  void uart_lld_serve_interrupt(UARTDriver *uartp);
 #ifdef __cplusplus
 }
 #endif

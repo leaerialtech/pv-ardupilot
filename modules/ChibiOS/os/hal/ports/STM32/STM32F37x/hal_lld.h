@@ -42,6 +42,11 @@
 /*===========================================================================*/
 
 /**
+ * @brief   Requires use of SPIv2 driver model.
+ */
+#define HAL_LLD_SELECT_SPI_V2           TRUE
+
+/**
  * @name    Platform identification macros
  * @{
  */
@@ -130,7 +135,7 @@
 /**
  * @brief   Minimum ADC clock frequency.
  */
-#define STM32_ADCCLK_MIN        6000000
+#define STM32_ADCCLK_MIN        600000
 
 /**
  * @brief   Maximum SDADC clock frequency in fast mode.
@@ -578,7 +583,7 @@
 #if STM32_LSI_ENABLED
 #else /* !STM32_LSI_ENABLED */
 
-#if STM32_RTCSEL == STM32_RTCSEL_LSI
+#if HAL_USE_RTC && (STM32_RTCSEL == STM32_RTCSEL_LSI)
 #error "LSI not enabled, required by STM32_RTCSEL"
 #endif
 
@@ -993,7 +998,9 @@
 #include "stm32_registry.h"
 #include "stm32_isr.h"
 #include "stm32_dma.h"
+#include "stm32_exti.h"
 #include "stm32_rcc.h"
+#include "stm32_tim.h"
 
 #ifdef __cplusplus
 extern "C" {

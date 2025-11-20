@@ -275,6 +275,9 @@ void stm32_clock_init(void) {
 #if STM32_SAI1SEL != STM32_SAI1SEL_OFF
     dckcfgr1 |= STM32_SAI1SEL;
 #endif
+#if STM32_TIMPRE_ENABLE == TRUE
+    dckcfgr1 |= RCC_DCKCFGR1_TIMPRE;
+#endif
     RCC->DCKCFGR1 = dckcfgr1;
   }
 
@@ -288,6 +291,9 @@ void stm32_clock_init(void) {
 
   /* Flash setup.*/
   FLASH->ACR = FLASH_ACR_ARTEN | FLASH_ACR_PRFTEN | STM32_FLASHBITS;
+  while ((FLASH->ACR & FLASH_ACR_LATENCY_Msk) !=
+         (STM32_FLASHBITS & FLASH_ACR_LATENCY_Msk)) {
+  }
 
   /* Switching to the configured clock source if it is different from HSI.*/
 #if (STM32_SW != STM32_SW_HSI)

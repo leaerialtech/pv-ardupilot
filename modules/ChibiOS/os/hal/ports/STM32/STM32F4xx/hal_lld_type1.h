@@ -32,7 +32,7 @@
  *            Foundation line.
  *          - STM32F401xx, STM32F410xx, STM32F411xx, STM32F412xx
  *            for High-performance STM32F4 devices of Access line.
- *          - STM32F427xx, STM32F437xx, STM32F429xx, STM32F439xx, STM32F469xx, 
+ *          - STM32F427xx, STM32F437xx, STM32F429xx, STM32F439xx, STM32F469xx,
  *            STM32F479xx for High-performance STM32F4 devices of Advanced line.
  *          .
  *
@@ -538,9 +538,8 @@
 
 #define STM32_CK48MSEL_MASK     (1 << 27)   /**< CK48MSEL mask.             */
 #define STM32_CK48MSEL_PLL      (0 << 27)   /**< PLL48CLK source is PLL.    */
-#define STM32_CK48MSEL_PLLALT   (1 << 27)   /**< PLL48CLK source is PLLSAI
-                                                 or PLLI2S depending on
-                                                 device.                    */
+#define STM32_CK48MSEL_PLLSAI   (1 << 27)   /**< PLL48CLK source is PLLSAI. */
+#define STM32_CK48MSEL_PLLALT   (1 << 27)   /**< Alias.                     */
 
 #define STM32_SDMMCSEL_MASK     (1 << 28)   /**< SDMMCSEL mask.             */
 #define STM32_SDMMCSEL_PLL48CLK (0 << 28)   /**< SDMMC source is PLL48CLK.  */
@@ -784,7 +783,7 @@
  * @brief   PLLI2SN multiplier value.
  * @note    The allowed values are 192..432, except for
  *          STM32F446 where values are 50...432.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SN_VALUE) || defined(__DOXYGEN__)
@@ -794,7 +793,7 @@
 /**
  * @brief   PLLI2SM divider value.
  * @note    The allowed values are 2..63.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SM_VALUE) || defined(__DOXYGEN__)
@@ -804,7 +803,7 @@
 /**
  * @brief   PLLI2SR divider value.
  * @note    The allowed values are 2..7.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SR_VALUE) || defined(__DOXYGEN__)
@@ -906,7 +905,6 @@
 
 /**
  * @brief   SAI1SEL value (SAI1 clock source).
- * @todo    Add check.
  */
 #if !defined(STM32_SAI1SEL) || defined(__DOXYGEN__)
 #define STM32_SAI1SEL               STM32_SAI1SEL_OFF
@@ -914,7 +912,6 @@
 
 /**
  * @brief   SAI2SEL value (SAI2 clock source).
- * @todo    Add check.
  */
 #if !defined(STM32_SAI2SEL) || defined(__DOXYGEN__)
 #define STM32_SAI2SEL               STM32_SAI2SEL_OFF
@@ -1014,6 +1011,66 @@
 #error "Using a wrong mcuconf.h file, STM32F4xx_MCUCONF not defined"
 #endif
 
+#if defined(STM32F401xx) && !defined(STM32F401_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F401_MCUCONF not defined"
+#endif
+
+#if defined(STM32F410xx) && !defined(STM32F410_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F410_MCUCONF not defined"
+#endif
+
+#if defined(STM32F411xx) && !defined(STM32F411_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F411_MCUCONF not defined"
+#endif
+
+#if defined(STM32F412xx) && !defined(STM32F412_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F412_MCUCONF not defined"
+#endif
+
+#if defined(STM32F405xx) && !defined(STM32F405_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F405_MCUCONF not defined"
+#endif
+
+#if defined(STM32F415xx) && !defined(STM32F415_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F415_MCUCONF not defined"
+#endif
+
+#if defined(STM32F407xx) && !defined(STM32F407_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F407_MCUCONF not defined"
+#endif
+
+#if defined(STM32F417xx) && !defined(STM32F417_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F417_MCUCONF not defined"
+#endif
+
+#if defined(STM32F427xx) && !defined(STM32F427_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F427_MCUCONF not defined"
+#endif
+
+#if defined(STM32F429xx) && !defined(STM32F429_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F429_MCUCONF not defined"
+#endif
+
+#if defined(STM32F437xx) && !defined(STM32F437_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F437_MCUCONF not defined"
+#endif
+
+#if defined(STM32F439xx) && !defined(STM32F439_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F439_MCUCONF not defined"
+#endif
+
+#if defined(STM32F446xx) && !defined(STM32F446_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F446_MCUCONF not defined"
+#endif
+
+#if defined(STM32F469xx) && !defined(STM32F469_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F469_MCUCONF not defined"
+#endif
+
+#if defined(STM32F479xx) && !defined(STM32F479_MCUCONF)
+#error "Using a wrong mcuconf.h file, STM32F479_MCUCONF not defined"
+#endif
+
 #else /* !defined(STM32F4XX) */
 /*
  * Configuration-related checks.
@@ -1024,7 +1081,8 @@
 #endif /* !defined(STM32F4XX) */
 
 /**
- * @name    Maximum frequency thresholds and wait states for flash access.
+ * @name    Maximum frequency thresholds, wait states and
+ *          parallelism for flash access.
  * @{
  */
 #if defined(STM32F429_439xx) || defined(STM32F427_437xx) ||                 \
@@ -1040,6 +1098,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         24000000
 #define STM32_1WS_THRESHOLD         48000000
@@ -1050,6 +1109,7 @@
 #define STM32_6WS_THRESHOLD         168000000
 #define STM32_7WS_THRESHOLD         180000000
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         22000000
 #define STM32_1WS_THRESHOLD         44000000
@@ -1060,6 +1120,7 @@
 #define STM32_6WS_THRESHOLD         154000000
 #define STM32_7WS_THRESHOLD         176000000
 #define STM32_8WS_THRESHOLD         180000000
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 180) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         20000000
 #define STM32_1WS_THRESHOLD         40000000
@@ -1070,6 +1131,7 @@
 #define STM32_6WS_THRESHOLD         140000000
 #define STM32_7WS_THRESHOLD         168000000
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           0
 #else
 #error "invalid VDD voltage specified"
 #endif
@@ -1085,6 +1147,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         24000000
 #define STM32_1WS_THRESHOLD         48000000
@@ -1095,6 +1158,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         18000000
 #define STM32_1WS_THRESHOLD         36000000
@@ -1105,6 +1169,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 170) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         16000000
 #define STM32_1WS_THRESHOLD         32000000
@@ -1115,6 +1180,7 @@
 #define STM32_6WS_THRESHOLD         100000000
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           0
 #else
 #error "invalid VDD voltage specified"
 #endif
@@ -1130,6 +1196,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         24000000
 #define STM32_1WS_THRESHOLD         48000000
@@ -1140,6 +1207,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         18000000
 #define STM32_1WS_THRESHOLD         36000000
@@ -1150,6 +1218,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 171) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         16000000
 #define STM32_1WS_THRESHOLD         32000000
@@ -1160,10 +1229,11 @@
 #define STM32_6WS_THRESHOLD         100000000
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           0
+
 #else
 #error "invalid VDD voltage specified"
 #endif
-
 
 #elif defined(STM32F401xx)
 #if (STM32_VDD >= 270) && (STM32_VDD <= 360)
@@ -1176,6 +1246,8 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
+
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         24000000
 #define STM32_1WS_THRESHOLD         48000000
@@ -1186,6 +1258,8 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
+
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         18000000
 #define STM32_1WS_THRESHOLD         36000000
@@ -1196,6 +1270,8 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
+
 #elif (STM32_VDD >= 180) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         16000000
 #define STM32_1WS_THRESHOLD         32000000
@@ -1206,6 +1282,8 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           0
+
 #else
 #error "invalid VDD voltage specified"
 #endif
@@ -1220,6 +1298,7 @@
 #define STM32_5WS_THRESHOLD         0
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         24000000
 #define STM32_1WS_THRESHOLD         48000000
@@ -1229,6 +1308,7 @@
 #define STM32_5WS_THRESHOLD         0
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         18000000
 #define STM32_1WS_THRESHOLD         36000000
@@ -1238,6 +1318,7 @@
 #define STM32_5WS_THRESHOLD         108000000
 #define STM32_6WS_THRESHOLD         120000000
 #define STM32_7WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 180) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         16000000
 #define STM32_1WS_THRESHOLD         32000000
@@ -1247,6 +1328,8 @@
 #define STM32_5WS_THRESHOLD         96000000
 #define STM32_6WS_THRESHOLD         112000000
 #define STM32_7WS_THRESHOLD         120000000
+#define STM32_FLASH_PSIZE           0
+
 #else
 #error "invalid VDD voltage specified"
 #endif
@@ -1362,7 +1445,7 @@
 #if STM32_LSI_ENABLED
 #else /* !STM32_LSI_ENABLED */
 
-#if STM32_RTCSEL == STM32_RTCSEL_LSI
+#if HAL_USE_RTC && (STM32_RTCSEL == STM32_RTCSEL_LSI)
 #error "LSI not enabled, required by STM32_RTCSEL"
 #endif
 

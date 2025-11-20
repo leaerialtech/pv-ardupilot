@@ -1,8 +1,12 @@
 /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+//Modified by Leading Edge Aerial Technologies, LLC. 		   //
 /////////////////////////////////////////////////////////////////
 
+
+#include "../ArduCopter/Copter.h"
 #include "AC_Sprayer.h"
+
+#if HAL_SPRAYER_ENABLED
 
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_HAL/AP_HAL.h>
@@ -10,10 +14,9 @@
 #include <SRV_Channel/SRV_Channel.h>
 #include <GCS_MAVLink/GCS.h>
 
-#include "../ArduCopter/Copter.h"
+
 
 extern const AP_HAL::HAL& hal;
-extern Copter copter;
 
 
 static bool firstRun = true; 
@@ -32,7 +35,7 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     // @Description: Desired pump speed when traveling 1m/s expressed as a percentage
     // @Units: %
     // @Range: 0 100
-    // @User: Standardf
+    // @User: Standard
     AP_GROUPINFO("PUMP_RATE",   1, AC_Sprayer, _pump_pct_1ms, AC_SPRAYER_DEFAULT_PUMP_RATE),
 
     // @Param: SPINNER
@@ -47,7 +50,7 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     // @DisplayName: Speed minimum
     // @Description: Speed minimum at which we will begin spraying
     // @Units: cm/s
-    // @Range: 0 1000fWD_
+    // @Range: 0 1000
     // @User: Standard
     AP_GROUPINFO("SPEED_MIN",   3, AC_Sprayer, _speed_min, AC_SPRAYER_DEFAULT_SPEED_MIN),
 
@@ -60,10 +63,7 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     AP_GROUPINFO("PUMP_MIN",   4, AC_Sprayer, _pump_min_pct, AC_SPRAYER_DEFAULT_PUMP_MIN),
 
 
-
-
-
-//PrecisionVision: 
+    //PrecisionVision: 
     // @Param: SWATH_WIDTH
     // @DisplayName: Swath width in Meters
     // @Description: The distance the sprayer-boom / rig is set to produce its output to cover
@@ -90,7 +90,7 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
     AP_GROUPINFO("DR_MAX",   12, AC_Sprayer, _spray_door_pwm_range_max, 0),
     AP_GROUPINFO("DR_DES",   13, AC_Sprayer, _spray_door_pwm_desired, 0),
 
-
+    //PRECISIONVISION
     AP_GROUPINFO("HD_INT", 14, AC_Sprayer, _heading_interval, 15),
 
     AP_GROUPINFO("MTR2_DEF", 15, AC_Sprayer, _spray_motor_pwm_default2, 1),
@@ -144,9 +144,11 @@ void AC_Sprayer::run(const bool true_false, const bool ignore_HeadingCheck)
         firstRun = false; 
         stop_spraying();
         return; 
-   }else if (true_false == _flags.running) {
-        return;
     }
+   //else if (true_false == _flags.running) {
+   //     return;
+   //}
+
 
     // set flag indicate whether spraying is permitted:
     // do not allow running to be set to true if we are currently not enabled
@@ -157,43 +159,27 @@ void AC_Sprayer::run(const bool true_false, const bool ignore_HeadingCheck)
         stop_spraying();
     }
 
-    //gcs().send_text(MAV_SEVERITY_ALERT, (_flags.running ? "Spray on" : "Spray is off"));
-    
 }
 
 void AC_Sprayer::stop_spraying()
 {
-   // if(!_flags.spraying){return;}
 
-   // if(firstSprayOnForEscCal){
-    //    firstSprayOnForEscCal = false;  
-   // }
-   
+    
      SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_default);
-
-     
      if(_config == 2)
      {
-
         SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_default);    
      }else if(_config == 3){
-
-
         SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_motor_pwm_default2);
      }
-    
 
-
-
-//not sure what this is about
-
-   
     _flags.spraying = false;
 }
 
 /// update - adjust pwm of servo controlling pump speed according to the desired quantity and our horizontal speed
 void AC_Sprayer::update()
 {
+
     // exit immediately if we are disabled or shouldn't be running
     if (!_config || !running()) {
         run(false,false);
@@ -211,14 +197,17 @@ void AC_Sprayer::update()
     Vector3f velocity;
     if (!AP::ahrs().get_velocity_NED(velocity)) {
         // treat unknown velocity as zero which should lead to pump stopping
-        // velocity will already be zero but this avoids a coverity warning
+        // velocity will already be zero but this avoids a severity warning
         velocity.zero();
     }
-    float ground_speed = norm(velocity.x * 100.0f, velocity.y * 100.0f);
-    */
 
-    // get the current time
-    const uint32_t now = AP_HAL::millis();
+    float ground_speed = velocity.xy().length() * 100.0;
+    */
+  
+  	// get the current time
+     const uint32_t now = AP_HAL::millis();
+
+    /**
     if (copter.failsafe.last_heartbeat_ms  == 0) {
         run(false, false);
         return;
@@ -229,82 +218,78 @@ void AC_Sprayer::update()
         run(false,false);
         return;
     }
+    */
 
-    bool should_be_spraying = _flags.spraying;
 
-    bool waitForHeadingChange = !_flags.ignore_heading_check;  //might also include "guided" modes in future? 
+
+    //4.5.7+ changed the way it does heartbeat:
+    this->_pv_turnoff_sprayer_if_missing_heartbeat();
+
+
+    bool should_be_spraying = _flags.running;
+
+    bool waitForHeadingChange = false; //might also include "guided" modes in future? 
     float desiredHeading = 0.0;
     int32_t currentHeading = (AP::ahrs().yaw_sensor / 100);
  
-    if(!_flags.ignore_heading_check){ 
+    if(!_flags.ignore_heading_check) //if we need heading checks...
+    { 
         //to maintain backward compability if ignore waypoints is not specifically defined, we do a test for "slow-waypoints"
         //and if it is a slow waypoint (one with a delay > 0) we disable the heading checks (this was the original workaround implementaton for spotspray)
         //in future versions the intention will be that heading checks are entirely determined by the mission design or user commands, not fastwaypoint
         //(particularlly since next versions of ardupilot will support S-Curve and do not have the same fast/slow waypoint concept)
         
-        if(copter.control_mode == Mode::Number::AUTO){
+        if(copter.get_flight_mode_num() == Mode::Number::AUTO){
             waitForHeadingChange = true;
+            
             if(!copter.wp_nav->is_fast_waypoint()){
                 waitForHeadingChange = false; //holds and stop and spray do not need
             }
             desiredHeading = copter.mode_auto.wp_bearing() / 100;
-     
         }
     }
 
     int32_t diff = abs(desiredHeading - currentHeading);
     if(diff > 360){ diff = diff - 360;}
   
-
-    // check our speed vs the minimum
-    //if (ground_speed >= _speed_min ) {
-
-        // if we are not already spraying
-        if (!_flags.spraying) {
-            // set the timer if this is the first time we've surpassed the min speed
-            if (_speed_over_min_time == 0) {
-                _speed_over_min_time = now;
-            }else{
-                // check if we've been over the speed long enough to engage the sprayer
-                if((now - _speed_over_min_time) > AC_SPRAYER_DEFAULT_TURN_ON_DELAY) {
-
-                    if(!waitForHeadingChange){
-                        should_be_spraying = true;
-                    }else{
-                        should_be_spraying = (diff < _heading_interval || diff > (360.0-_heading_interval));
-                    }
-                
-                    _speed_over_min_time = 0;
-                }
-            }
-        }else{
-              if(waitForHeadingChange){
-                  should_be_spraying = (diff < _heading_interval || diff > (360.0-_heading_interval));
-               }
-        }
-        // reset the speed under timer
-        _speed_under_min_time = 0;
-    
     /*
-    } else {
-        // we are under the min speed.
-        if (_flags.spraying) {
-            // set the timer if this is the first time we've dropped below the min speed
-            if (_speed_under_min_time == 0) {
-                _speed_under_min_time = now;
-            }else{
-                // check if we've been over the speed long enough to engage the sprayer
-                if((now - _speed_under_min_time) > AC_SPRAYER_DEFAULT_SHUT_OFF_DELAY) {
-                    should_be_spraying = false;
-                    _speed_under_min_time = 0;
-                }
-            }
-        }
-        // reset the speed over timer
-        _speed_over_min_time = 0;
+    if(diff < _heading_interval || diff > (360.0-_heading_interval)){
+        gcs().send_text(MAV_SEVERITY_INFO, should_be_spraying ? "in y" : "in n");
+    }else{
+          gcs().send_text(MAV_SEVERITY_INFO, "out");
     }
     */
 
+
+    // if we are not already spraying
+    if (!_flags.spraying) 
+    { 
+        if(should_be_spraying)
+        {
+            if(waitForHeadingChange)
+            {
+                if(diff < _heading_interval || diff > (360.0-_heading_interval))
+                {
+                    if(_heading_within_bounds_time == 0)
+                    {
+                        _heading_within_bounds_time = now;
+                    }
+                    if(now - _heading_within_bounds_time < AC_SPRAYER_DEFAULT_HEADING_DELAY)
+                    {
+                        should_be_spraying = false;
+                    }else{
+                    }
+                }
+                else
+                {
+                    should_be_spraying = false;
+                    _heading_within_bounds_time = 0;    
+                }
+            }
+        }
+    }
+    
+ 
     // if testing pump output speed as if traveling at 1m/s
     if (_flags.testing) {
       //  ground_speed = 100.0f;
@@ -312,48 +297,51 @@ void AC_Sprayer::update()
     }
 
 
-    if(copter.control_mode == Mode::Number::AUTO){
+    if(copter.get_flight_mode_num() == Mode::Number::AUTO){
         if(!copter.wp_nav->reached_prev_wpt()){
             should_be_spraying = false; 
         }
     }
     
-
     // if spraying or testing update the pump servo position
     if (should_be_spraying) {
-        //float pos = ground_speed * _pump_pct_1ms;
-        //pos = MAX(pos, 100 *_pump_min_pct); // ensure min pump speed
-        //pos = MIN(pos,10000); // clamp to range   
-        //SRV_Channels::move_servo(SRV_Channel::k_sprayer_pump, pos, 0, 10000);
-      
-       // SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spinner_pwm);
-      //PrecisionVision is now sending up the desired PWMs directly in a custom parameter, ignoring the original ardupilot scaling 
-
-       /// SRV_Channels::move_servo(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_desired, 0, 10000);
-      
-    //  if(firstSprayOnForEscCal){
-
-     //   SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_range_max);
-    //    SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_range_max);
-
-    //  }else{
-
 
         SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_pump, _spray_motor_pwm_desired);
-
         if(_config == 2){
             SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_door_pwm_desired);
         }else if (_config == 3){
 
             SRV_Channels::set_output_pwm(SRV_Channel::k_sprayer_spinner, _spray_motor_pwm_desired2);
        }     
-     // }
-
         _flags.spraying = true;
     } else {
         stop_spraying();
     }
 }
+
+    void AC_Sprayer::_pv_turnoff_sprayer_if_missing_heartbeat()
+    {
+          const uint32_t now = AP_HAL::millis();
+          const uint32_t last_heartbeat_ms = gcs().sysid_myggcs_last_seen_time_ms();
+
+
+
+        if (last_heartbeat_ms  == 0) {
+
+            this->run(false,false);
+            return;
+        }
+
+        // Check if we have gotten a GCS heartbeat recently (GCS sysid must match SYSID_MYGCS parameter)
+        if (now - last_heartbeat_ms  > 2000) {
+
+            this->run(false,false);
+            return;
+        }
+    }
+
+
+
 
 namespace AP {
 
@@ -362,4 +350,9 @@ AC_Sprayer *sprayer()
     return AC_Sprayer::get_singleton();
 }
 
+
+
+
+
 };
+#endif // HAL_SPRAYER_ENABLED

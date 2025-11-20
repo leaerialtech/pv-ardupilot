@@ -41,7 +41,7 @@
 /*===========================================================================*/
 
 static const uint8_t zero_status[] = {0x00, 0x00};
-static const uint8_t active_status[] ={0x00, 0x00};
+static const uint8_t active_status[] = {0x00, 0x00};
 static const uint8_t halted_status[] = {0x01, 0x00};
 
 /*===========================================================================*/
@@ -297,10 +297,12 @@ void usbObjectInit(USBDriver *usbp) {
  *
  * @param[in] usbp      pointer to the @p USBDriver object
  * @param[in] config    pointer to the @p USBConfig object
+ * @return              The operation status.
  *
  * @api
  */
-void usbStart(USBDriver *usbp, const USBConfig *config) {
+msg_t usbStart(USBDriver *usbp, const USBConfig *config) {
+  msg_t msg;
   unsigned i;
 
   osalDbgCheck((usbp != NULL) && (config != NULL));
@@ -308,13 +310,28 @@ void usbStart(USBDriver *usbp, const USBConfig *config) {
   osalSysLock();
   osalDbgAssert((usbp->state == USB_STOP) || (usbp->state == USB_READY),
                 "invalid state");
+
   usbp->config = config;
   for (i = 0; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
     usbp->epc[i] = NULL;
   }
+
+#if defined(USB_LLD_ENHANCED_API)
+  msg = usb_lld_start(usbp);
+#else
   usb_lld_start(usbp);
-  usbp->state = USB_READY;
+  msg = HAL_RET_SUCCESS;
+#endif
+  if (msg == HAL_RET_SUCCESS) {
+    usbp->state = USB_READY;
+  }
+  else {
+    usbp->state = USB_STOP;
+  }
+
   osalSysUnlock();
+
+  return msg;
 }
 
 /**
@@ -711,34 +728,41 @@ void _usb_reset(USBDriver *usbp) {
  * @notapi
  */
 void _usb_suspend(USBDriver *usbp) {
-  /* No state change, suspend always returns to previous state. */
 
-  /* State transition.*/
-  usbp->saved_state = usbp->state;
-  usbp->state       = USB_SUSPENDED;
+  /* It could happen that multiple suspend events are triggered.*/
+  if (usbp->state != USB_SUSPENDED) {
 
-  /* Notification of suspend event.*/
-  _usb_isr_invoke_event_cb(usbp, USB_EVENT_SUSPEND);
+    /* State transition, saving the current state.*/
+    usbp->saved_state = usbp->state;
+    usbp->state       = USB_SUSPENDED;
 
-  /* Signaling the event to threads waiting on endpoints.*/
-#if USB_USE_WAIT == TRUE
-  {
-    unsigned i;
+    /* Notification of suspend event.*/
+    _usb_isr_invoke_event_cb(usbp, USB_EVENT_SUSPEND);
 
-    for (i = 0; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
-      if (usbp->epc[i] != NULL) {
-        osalSysLockFromISR();
-        if (usbp->epc[i]->in_state != NULL) {
-          osalThreadResumeI(&usbp->epc[i]->in_state->thread, MSG_RESET);
+    /* Terminating all pending transactions.*/
+    usbp->transmitting  = 0;
+    usbp->receiving     = 0;
+
+    /* Signaling the event to threads waiting on endpoints.*/
+  #if USB_USE_WAIT == TRUE
+    {
+      unsigned i;
+
+      for (i = 0; i <= (unsigned)USB_MAX_ENDPOINTS; i++) {
+        if (usbp->epc[i] != NULL) {
+          osalSysLockFromISR();
+          if (usbp->epc[i]->in_state != NULL) {
+            osalThreadResumeI(&usbp->epc[i]->in_state->thread, MSG_RESET);
+          }
+          if (usbp->epc[i]->out_state != NULL) {
+            osalThreadResumeI(&usbp->epc[i]->out_state->thread, MSG_RESET);
+          }
+          osalSysUnlockFromISR();
         }
-        if (usbp->epc[i]->out_state != NULL) {
-          osalThreadResumeI(&usbp->epc[i]->out_state->thread, MSG_RESET);
-        }
-        osalSysUnlockFromISR();
       }
     }
+  #endif
   }
-#endif
 }
 
 /**
@@ -752,11 +776,15 @@ void _usb_suspend(USBDriver *usbp) {
  */
 void _usb_wakeup(USBDriver *usbp) {
 
-  /* State transition, returning to the previous state.*/
-  usbp->state = usbp->saved_state;
+  /* It could happen that multiple waakeup events are triggered.*/
+  if (usbp->state == USB_SUSPENDED) {
 
-  /* Notification of suspend event.*/
-  _usb_isr_invoke_event_cb(usbp, USB_EVENT_WAKEUP);
+    /* State transition, returning to the previous state.*/
+    usbp->state = usbp->saved_state;
+
+    /* Notification of suspend event.*/
+    _usb_isr_invoke_event_cb(usbp, USB_EVENT_WAKEUP);
+  }
 }
 
 /**
@@ -776,7 +804,7 @@ void _usb_ep0setup(USBDriver *usbp, usbep_t ep) {
      packets?*/
   if (usbp->ep0state != USB_EP0_STP_WAITING) {
     /* This is unexpected could require handling with a warning event.*/
-    /* TODO: handling here.*/
+    /* CHTODO: handling here.*/
 
     /* Resetting the EP0 state machine and going ahead.*/
     usbp->ep0state = USB_EP0_STP_WAITING;

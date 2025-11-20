@@ -145,10 +145,14 @@ static bool mmc_init(SDCDriver *sdcp) {
   uint32_t ocr;
   unsigned i;
   uint32_t resp[1];
-
+#if defined(STM32_VDD) && STM32_VDD <= 180
+  ocr = 0xC0000080U;
+#else
   ocr = 0xC0FF8000U;
+#endif
   i = 0;
   while (true) {
+    osalThreadSleepMilliseconds(10);
     if (sdc_lld_send_cmd_short(sdcp, MMCSD_CMD_INIT, ocr, resp)) {
       return HAL_FAILED;
     }
@@ -161,7 +165,6 @@ static bool mmc_init(SDCDriver *sdcp) {
     if (++i >= (unsigned)SDC_INIT_RETRY) {
       return HAL_FAILED;
     }
-    osalThreadSleepMilliseconds(10);
   }
 
   return HAL_SUCCESS;
@@ -319,7 +322,7 @@ static bool sdc_cmd6_check_status(sd_switch_function_t function,
 static bool sdc_detect_bus_clk(SDCDriver *sdcp, sdcbusclk_t *clk) {
   uint32_t cmdarg;
   const size_t N = 64;
-  uint8_t tmp[N];
+  uint8_t *tmp = sdcp->buf;
 
   /* Safe default.*/
   *clk = SDC_CLK_25MHz;
@@ -333,7 +336,8 @@ static bool sdc_detect_bus_clk(SDCDriver *sdcp, sdcbusclk_t *clk) {
 
   /* Read switch functions' register.*/
   if (sdc_lld_read_special(sdcp, tmp, N, MMCSD_CMD_SWITCH, 0)) {
-    return HAL_FAILED;
+    *clk = SDC_CLK_25MHz; // always return something
+    return HAL_SUCCESS;
   }
 
   /* Check card capabilities parsing acquired data.*/
@@ -343,7 +347,8 @@ static bool sdc_detect_bus_clk(SDCDriver *sdcp, sdcbusclk_t *clk) {
 
     /* Write constructed command and read operation status in single call.*/
     if (sdc_lld_read_special(sdcp, tmp, N, MMCSD_CMD_SWITCH, cmdarg)) {
-      return HAL_FAILED;
+      *clk = SDC_CLK_25MHz; // always return something
+      return HAL_SUCCESS;
     }
 
     /* Check card answer for success status bits.*/
@@ -373,15 +378,9 @@ static bool sdc_detect_bus_clk(SDCDriver *sdcp, sdcbusclk_t *clk) {
 static bool mmc_detect_bus_clk(SDCDriver *sdcp, sdcbusclk_t *clk) {
   uint32_t cmdarg;
   uint32_t resp[1];
-  uint8_t *scratchpad = sdcp->config->scratchpad;
 
   /* Safe default.*/
   *clk = SDC_CLK_25MHz;
-
-  /* Use safe default when there is no space for data.*/
-  if (NULL == scratchpad) {
-    return HAL_SUCCESS;
-  }
 
   cmdarg = mmc_cmd6_construct(MMC_SWITCH_WRITE_BYTE, 185, 1, 0);
   if (!(sdc_lld_send_cmd_short_crc(sdcp, MMCSD_CMD_SWITCH, cmdarg, resp) ||
@@ -567,20 +566,37 @@ void sdcObjectInit(SDCDriver *sdcp) {
  * @param[in] config    pointer to the @p SDCConfig object, can be @p NULL if
  *                      the driver supports a default configuration or
  *                      requires no configuration
+ * @return              The operation status.
  *
  * @api
  */
-void sdcStart(SDCDriver *sdcp, const SDCConfig *config) {
+msg_t sdcStart(SDCDriver *sdcp, const SDCConfig *config) {
+  msg_t msg;
 
   osalDbgCheck(sdcp != NULL);
 
   osalSysLock();
   osalDbgAssert((sdcp->state == BLK_STOP) || (sdcp->state == BLK_ACTIVE),
                 "invalid state");
+
   sdcp->config = config;
+
+#if defined(SDC_LLD_ENHANCED_API)
+  msg = sdc_lld_start(sdcp);
+#else
   sdc_lld_start(sdcp);
-  sdcp->state = BLK_ACTIVE;
+  msg = HAL_RET_SUCCESS;
+#endif
+  if (msg == HAL_RET_SUCCESS) {
+    sdcp->state = BLK_ACTIVE;
+  }
+  else {
+    sdcp->state = BLK_STOP;
+  }
+
   osalSysUnlock();
+
+  return msg;
 }
 
 /**
@@ -677,25 +693,14 @@ bool sdcConnect(SDCDriver *sdcp) {
     goto failed;
   }
 
-  /* Switches to high speed.*/
-  if (HAL_SUCCESS != detect_bus_clk(sdcp, &clk)) {
-    goto failed;
-  }
-  sdc_lld_set_data_clk(sdcp, clk);
-
   /* Reads extended CSD if needed and possible.*/
   if (SDC_MODE_CARDTYPE_MMC == (sdcp->cardmode & SDC_MODE_CARDTYPE_MASK)) {
 
     /* The card is a MMC, checking if it is a large device.*/
     if (_mmcsd_get_slice(sdcp->csd, MMCSD_CSD_MMC_CSD_STRUCTURE_SLICE) > 1U) {
-      uint8_t *ext_csd = sdcp->config->scratchpad;
-
-      /* Size detection requires the buffer.*/
-      if (NULL == ext_csd) {
-        goto failed;
-      }
-
-      if(sdc_lld_read_special(sdcp, ext_csd, 512, MMCSD_CMD_SEND_EXT_CSD, 0)) {
+      uint8_t *ext_csd = sdcp->buf;
+      osalThreadSleepMilliseconds(10);
+      if (sdc_lld_read_special(sdcp, ext_csd, 512, MMCSD_CMD_SEND_EXT_CSD, 0)) {
         goto failed;
       }
 
@@ -711,6 +716,12 @@ bool sdcConnect(SDCDriver *sdcp) {
     /* The card is an SDC, capacity from the normal CSD.*/
     sdcp->capacity = _mmcsd_get_capacity(sdcp->csd);
   }
+
+  /* Switches to high speed.*/
+  if (HAL_SUCCESS != detect_bus_clk(sdcp, &clk)) {
+    goto failed;
+  }
+  sdc_lld_set_data_clk(sdcp, clk);
 
   /* Block length fixed at 512 bytes.*/
   if (sdc_lld_send_cmd_short_crc(sdcp, MMCSD_CMD_SET_BLOCKLEN,
@@ -989,7 +1000,7 @@ bool sdcErase(SDCDriver *sdcp, uint32_t startblk, uint32_t endblk) {
   }
 
   /* Quick sleep to allow it to transition to programming or receiving state */
-  /* TODO: ??????????????????????????? */
+  /* CHTODO: ??????????????????????????? */
 
   /* Wait for it to return to transfer state to indicate it has finished erasing */
   if (_sdc_wait_for_transfer_state(sdcp)) {

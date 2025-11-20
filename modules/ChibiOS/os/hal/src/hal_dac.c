@@ -87,10 +87,12 @@ void dacObjectInit(DACDriver *dacp) {
  * @param[in] config    pointer to the @p DACConfig object, it can be
  *                      @p NULL if the low level driver implementation
  *                      supports a default configuration
+ * @return              The operation status.
  *
  * @api
  */
-void dacStart(DACDriver *dacp, const DACConfig *config) {
+msg_t dacStart(DACDriver *dacp, const DACConfig *config) {
+  msg_t msg;
 
   osalDbgCheck(dacp != NULL);
 
@@ -100,10 +102,23 @@ void dacStart(DACDriver *dacp, const DACConfig *config) {
                 "invalid state");
 
   dacp->config = config;
+
+#if defined(DAC_LLD_ENHANCED_API)
+  msg = dac_lld_start(dacp);
+#else
   dac_lld_start(dacp);
-  dacp->state = DAC_READY;
+  msg = HAL_RET_SUCCESS;
+#endif
+  if (msg == HAL_RET_SUCCESS) {
+    dacp->state = DAC_READY;
+  }
+  else {
+    dacp->state = DAC_STOP;
+  }
 
   osalSysUnlock();
+
+  return msg;
 }
 
 /**
@@ -324,7 +339,7 @@ msg_t dacConvert(DACDriver *dacp,
 void dacAcquireBus(DACDriver *dacp) {
 
   osalDbgCheck(dacp != NULL);
-	
+
   osalMutexLock(&dacp->mutex);
 }
 
@@ -340,7 +355,7 @@ void dacAcquireBus(DACDriver *dacp) {
 void dacReleaseBus(DACDriver *dacp) {
 
   osalDbgCheck(dacp != NULL);
-	
+
   osalMutexUnlock(&dacp->mutex);
 }
 #endif /* DAC_USE_MUTUAL_EXCLUSION == TRUE */

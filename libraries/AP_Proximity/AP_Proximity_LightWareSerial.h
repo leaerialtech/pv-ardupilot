@@ -2,7 +2,7 @@
 
 #include "AP_Proximity_Backend_Serial.h"
 
-//#if HAL_PROXIMITY_ENABLED
+#if HAL_PROXIMITY_ENABLED
 #define PROXIMITY_LIGHTWARE_PAYLOAD_LEN_MAX 256 // maximum payload size we can accept (in some configurations sensor may send as large as 1023)
 
 class AP_Proximity_LightWareSerial : public AP_Proximity_Backend_Serial
@@ -49,4 +49,4 @@ protected:
     } _msg;
 };
 
-//#endif // HAL_PROXIMITY_ENABLED
+#endif // HAL_PROXIMITY_ENABLED

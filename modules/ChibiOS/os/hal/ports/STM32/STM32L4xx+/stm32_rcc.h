@@ -595,6 +595,29 @@
  * @api
  */
 #define rccResetI2C3() rccResetAPB1R1(RCC_APB1RSTR1_I2C3RST)
+
+/**
+ * @brief Enables the I2C4 peripheral clock.
+ *
+ * @param[in] lp low power enable flag
+ *
+ * @api
+ */
+#define rccEnableI2C4(lp) rccEnableAPB1R2(RCC_APB1ENR2_I2C4EN, lp)
+
+/**
+ * @brief Disables the I2C4 peripheral clock.
+ *
+ * @api
+ */
+#define rccDisableI2C4() rccDisableAPB1R1(RCC_APB1ENR2_I2C4EN)
+
+/**
+ * @brief Resets the I2C4 peripheral.
+ *
+ * @api
+ */
+#define rccResetI2C4() rccResetAPB1R1(RCC_APB1RSTR2_I2C4RST)
 /** @} */
 
 /**
@@ -701,7 +724,7 @@
  *
  * @api
  */
-#define rccResetRNG() rccResetAHB3(RCC_AHB2RSTR_RNGRST)
+#define rccResetRNG() rccResetAHB2(RCC_AHB2RSTR_RNGRST)
 /** @} */
 
 /**
@@ -715,21 +738,21 @@
  *
  * @api
  */
-#define rccEnableSDMMC1(lp) rccEnableAPB2(RCC_APB2ENR_SDMMC1EN, lp)
+#define rccEnableSDMMC1(lp) rccEnableAHB2(RCC_AHB2ENR_SDMMC1EN, lp)
 
 /**
  * @brief   Disables the SDMMC1 peripheral clock.
  *
  * @api
  */
-#define rccDisableSDMMC1() rccDisableAPB2(RCC_APB2ENR_SDMMC1EN)
+#define rccDisableSDMMC1() rccDisableAHB2(RCC_AHB2ENR_SDMMC1EN)
 
 /**
  * @brief   Resets the SDMMC1 peripheral.
  *
  * @api
  */
-#define rccResetSDMMC1() rccResetAPB2(RCC_APB2RSTR_SDMMC1RST)
+#define rccResetSDMMC1() rccResetAHB2(RCC_AHB2RSTR_SDMMC1RST)
 /** @} */
 
 /**

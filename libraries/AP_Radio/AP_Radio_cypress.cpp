@@ -11,7 +11,7 @@
 #include <AP_Math/crc.h>
 #include "telem_structure.h"
 #include <AP_Notify/AP_Notify.h>
-#include <GCS_MAVLink/GCS_MAVLink.h>
+#include <GCS_MAVLink/GCS.h>
 
 /*
   driver for CYRF6936 radio
@@ -282,14 +282,13 @@ bool AP_Radio_cypress::init(void)
  */
 bool AP_Radio_cypress::reset(void)
 {
-    if (!dev->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        return false;
-    }
+    dev->get_semaphore()->take_blocking();
 
     /*
       to reset radio hold reset high for 0.5s, then low for 0.5s
      */
 #if defined(HAL_GPIO_RADIO_RESET)
+    hal.scheduler->expect_delay_ms(2000); // avoid main-loop-delay internal error
     hal.gpio->write(HAL_GPIO_RADIO_RESET, 1);
     hal.scheduler->delay(500);
     hal.gpio->write(HAL_GPIO_RADIO_RESET, 0);
@@ -1200,7 +1199,7 @@ void AP_Radio_cypress::irq_handler_thd(void *arg)
     }
 }
 
-void AP_Radio_cypress::trigger_timeout_event(void *arg)
+void AP_Radio_cypress::trigger_timeout_event(virtual_timer_t* vt, void *arg)
 {
     (void)arg;
     //we are called from ISR context
@@ -1438,10 +1437,7 @@ void AP_Radio_cypress::dsm_choose_channel(void)
  */
 void AP_Radio_cypress::start_recv_bind(void)
 {
-    if (!dev->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        // shouldn't be possible
-        return;
-    }
+    dev->get_semaphore()->take_blocking();
 
     Debug(1, "Cypress: start_recv_bind\n");
 

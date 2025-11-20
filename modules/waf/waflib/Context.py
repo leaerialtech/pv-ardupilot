@@ -6,19 +6,29 @@
 Classes and functions enabling the command system
 """
 
-import os, re, imp, sys
+import os, re, sys
 from waflib import Utils, Errors, Logs
 import waflib.Node
 
+if sys.hexversion > 0x3040000:
+	import types
+	class imp(object):
+		new_module = lambda x: types.ModuleType(x)
+else:
+	import imp
+
 # the following 3 constants are updated on each new release (do not touch)
-HEXVERSION=0x2000900
+HEXVERSION=0x2001b00
 """Constant updated on new releases"""
 
-WAFVERSION="2.0.9"
+WAFVERSION="2.0.27"
 """Constant updated on new releases"""
 
-WAFREVISION="8a950e7bca9a3a9b1ae62aae039ef76e2adc4177"
+WAFREVISION="c3e645e395505cb5faa115172b1fc9abdaeaf146"
 """Git revision when the waf version is updated"""
+
+WAFNAME="waf"
+"""Application name displayed on --help"""
 
 ABI = 20
 """Version of the build data cache file format (used in :py:const:`waflib.Context.DBFILE`)"""
@@ -134,7 +144,7 @@ class Context(ctx):
 	:type fun: string
 
 	.. inheritance-diagram:: waflib.Context.Context waflib.Build.BuildContext waflib.Build.InstallContext waflib.Build.UninstallContext waflib.Build.StepContext waflib.Build.ListContext waflib.Configure.ConfigurationContext waflib.Scripting.Dist waflib.Scripting.DistCheck waflib.Build.CleanContext
-
+	   :top-classes: waflib.Context.Context
 	"""
 
 	errors = Errors
@@ -266,7 +276,7 @@ class Context(ctx):
 				cache[node] = True
 				self.pre_recurse(node)
 				try:
-					function_code = node.read('rU', encoding)
+					function_code = node.read('r', encoding)
 					exec(compile(function_code, node.abspath(), 'exec'), self.exec_dict)
 				finally:
 					self.post_recurse(node)
@@ -337,8 +347,11 @@ class Context(ctx):
 		if 'stderr' not in kw:
 			kw['stderr'] = subprocess.PIPE
 
-		if Logs.verbose and not kw['shell'] and not Utils.check_exe(cmd[0]):
-			raise Errors.WafError('Program %s not found!' % cmd[0])
+		if Logs.verbose and not kw['shell'] and not Utils.check_exe(cmd[0], env=kw.get('env', os.environ)):
+			# This call isn't a shell command, and if the specified exe doesn't exist, check for a relative path being set
+			# with cwd and if so assume the caller knows what they're doing and don't pre-emptively fail
+			if not (cmd[0][0] == '.' and 'cwd' in kw):
+				raise Errors.WafError('Program %s not found!' % cmd[0])
 
 		cargs = {}
 		if 'timeout' in kw:
@@ -412,8 +425,11 @@ class Context(ctx):
 		quiet = kw.pop('quiet', None)
 		to_ret = kw.pop('output', STDOUT)
 
-		if Logs.verbose and not kw['shell'] and not Utils.check_exe(cmd[0]):
-			raise Errors.WafError('Program %r not found!' % cmd[0])
+		if Logs.verbose and not kw['shell'] and not Utils.check_exe(cmd[0], env=kw.get('env', os.environ)):
+			# This call isn't a shell command, and if the specified exe doesn't exist, check for a relative path being set
+			# with cwd and if so assume the caller knows what they're doing and don't pre-emptively fail
+			if not (cmd[0][0] == '.' and 'cwd' in kw):
+				raise Errors.WafError('Program %s not found!' % cmd[0])
 
 		kw['stdout'] = kw['stderr'] = subprocess.PIPE
 		if quiet is None:
@@ -502,7 +518,7 @@ class Context(ctx):
 			def build(bld):
 				bld.to_log('starting the build')
 
-		Provide a logger on the context class or override this methid if necessary.
+		Provide a logger on the context class or override this method if necessary.
 
 		:param msg: message
 		:type msg: string
@@ -520,7 +536,7 @@ class Context(ctx):
 		"""
 		Prints a configuration message of the form ``msg: result``.
 		The second part of the message will be in colors. The output
-		can be disabled easly by setting ``in_msg`` to a positive value::
+		can be disabled easily by setting ``in_msg`` to a positive value::
 
 			def configure(conf):
 				self.in_msg = 1
@@ -613,7 +629,7 @@ class Context(ctx):
 		is typically called once for a programming language group, see for
 		example :py:mod:`waflib.Tools.compiler_c`
 
-		:param var: glob expression, for example 'cxx\_\*.py'
+		:param var: glob expression, for example 'cxx\\_\\*.py'
 		:type var: string
 		:param ban: list of exact file names to exclude
 		:type ban: list of string
@@ -662,7 +678,7 @@ def load_module(path, encoding=None):
 
 	module = imp.new_module(WSCRIPT_FILE)
 	try:
-		code = Utils.readf(path, m='rU', encoding=encoding)
+		code = Utils.readf(path, m='r', encoding=encoding)
 	except EnvironmentError:
 		raise Errors.WafError('Could not read the file %r' % path)
 
@@ -678,7 +694,7 @@ def load_module(path, encoding=None):
 
 def load_tool(tool, tooldir=None, ctx=None, with_sys_path=True):
 	"""
-	Importx a Waf tool as a python module, and stores it in the dict :py:const:`waflib.Context.Context.tools`
+	Imports a Waf tool as a python module, and stores it in the dict :py:const:`waflib.Context.Context.tools`
 
 	:type  tool: string
 	:param tool: Name of the tool

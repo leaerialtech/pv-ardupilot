@@ -85,23 +85,37 @@ void wspiObjectInit(WSPIDriver *wspip) {
  *
  * @param[in] wspip     pointer to the @p WSPIDriver object
  * @param[in] config    pointer to the @p WSPIConfig object
+ * @return              The operation status.
  *
  * @api
  */
-void wspiStart(WSPIDriver *wspip, const WSPIConfig *config) {
+msg_t wspiStart(WSPIDriver *wspip, const WSPIConfig *config) {
+  msg_t msg;
 
   osalDbgCheck((wspip != NULL) && (config != NULL));
 
   osalSysLock();
-
   osalDbgAssert((wspip->state == WSPI_STOP) || (wspip->state == WSPI_READY),
                 "invalid state");
 
   wspip->config = config;
+
+#if defined(WSPI_LLD_ENHANCED_API)
+  msg = wspi_lld_start(wspip);
+#else
   wspi_lld_start(wspip);
-  wspip->state = WSPI_READY;
+  msg = HAL_RET_SUCCESS;
+#endif
+  if (msg == HAL_RET_SUCCESS) {
+    wspip->state = WSPI_READY;
+  }
+  else {
+    wspip->state = WSPI_STOP;
+  }
 
   osalSysUnlock();
+
+  return msg;
 }
 
 /**
@@ -213,10 +227,14 @@ void wspiStartReceive(WSPIDriver *wspip, const wspi_command_t *cmdp,
  *
  * @param[in] wspip     pointer to the @p WSPIDriver object
  * @param[in] cmdp      pointer to the command descriptor
+ * @return              The operation status.
+ * @retval false        if the operation succeeded.
+ * @retval true         if the operation failed because HW issues.
  *
  * @api
  */
-void wspiCommand(WSPIDriver *wspip, const wspi_command_t *cmdp) {
+bool wspiCommand(WSPIDriver *wspip, const wspi_command_t *cmdp) {
+  msg_t msg;
 
   osalDbgCheck((wspip != NULL) && (cmdp != NULL));
   osalDbgCheck((cmdp->cfg & WSPI_CFG_DATA_MODE_MASK) == WSPI_CFG_DATA_MODE_NONE);
@@ -227,9 +245,11 @@ void wspiCommand(WSPIDriver *wspip, const wspi_command_t *cmdp) {
   osalDbgAssert(wspip->config->end_cb == NULL, "has callback");
 
   wspiStartCommandI(wspip, cmdp);
-  (void) osalThreadSuspendS(&wspip->thread);
+  msg = osalThreadSuspendS(&wspip->thread);
 
   osalSysUnlock();
+
+  return (bool)(msg != MSG_OK);
 }
 
 /**
@@ -243,11 +263,15 @@ void wspiCommand(WSPIDriver *wspip, const wspi_command_t *cmdp) {
  * @param[in] cmdp      pointer to the command descriptor
  * @param[in] n         number of bytes to send
  * @param[in] txbuf     the pointer to the transmit buffer
+ * @return              The operation status.
+ * @retval false        if the operation succeeded.
+ * @retval true         if the operation failed because HW issues.
  *
  * @api
  */
-void wspiSend(WSPIDriver *wspip, const wspi_command_t *cmdp,
+bool wspiSend(WSPIDriver *wspip, const wspi_command_t *cmdp,
               size_t n, const uint8_t *txbuf) {
+  msg_t msg;
 
   osalDbgCheck((wspip != NULL) && (cmdp != NULL));
   osalDbgCheck((n > 0U) && (txbuf != NULL));
@@ -259,9 +283,11 @@ void wspiSend(WSPIDriver *wspip, const wspi_command_t *cmdp,
   osalDbgAssert(wspip->config->end_cb == NULL, "has callback");
 
   wspiStartSendI(wspip, cmdp, n, txbuf);
-  (void) osalThreadSuspendS(&wspip->thread);
+  msg = osalThreadSuspendS(&wspip->thread);
 
   osalSysUnlock();
+
+  return (bool)(msg != MSG_OK);
 }
 
 /**
@@ -275,11 +301,15 @@ void wspiSend(WSPIDriver *wspip, const wspi_command_t *cmdp,
  * @param[in] cmdp      pointer to the command descriptor
  * @param[in] n         number of bytes to send
  * @param[out] rxbuf    the pointer to the receive buffer
+ * @return              The operation status.
+ * @retval false        if the operation succeeded.
+ * @retval true         if the operation failed because HW issues.
  *
  * @api
  */
-void wspiReceive(WSPIDriver *wspip, const wspi_command_t *cmdp,
+bool wspiReceive(WSPIDriver *wspip, const wspi_command_t *cmdp,
                  size_t n, uint8_t *rxbuf) {
+  msg_t msg;
 
   osalDbgCheck((wspip != NULL) && (cmdp != NULL));
   osalDbgCheck((n > 0U) && (rxbuf != NULL));
@@ -291,9 +321,11 @@ void wspiReceive(WSPIDriver *wspip, const wspi_command_t *cmdp,
   osalDbgAssert(wspip->config->end_cb == NULL, "has callback");
 
   wspiStartReceiveI(wspip, cmdp, n, rxbuf);
-  (void) osalThreadSuspendS(&wspip->thread);
+  msg = osalThreadSuspendS(&wspip->thread);
 
   osalSysUnlock();
+
+  return (bool)(msg != MSG_OK);
 }
 #endif /* WSPI_USE_WAIT == TRUE */
 

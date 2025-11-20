@@ -102,7 +102,7 @@ OSAL_IRQ_HANDLER(Vector88) {
     if (ADCD1.grpp != NULL)
       _adc_isr_error_code(&ADCD1, ADC_ERR_OVERFLOW);
   }
-  /* TODO: Add here analog watchdog handling.*/
+  /* CHTODO: Add here analog watchdog handling.*/
 
   OSAL_IRQ_EPILOGUE();
 }
@@ -227,7 +227,7 @@ void adc_lld_start_conversion(ADCDriver *adcp) {
   adcp->adc->SMPR1 = grpp->smpr1;
   adcp->adc->SMPR2 = grpp->smpr2;
   adcp->adc->SMPR3 = grpp->smpr3;
-  adcp->adc->SQR1  = grpp->sqr1;
+  adcp->adc->SQR1  = grpp->sqr1 | ADC_SQR1_NUM_CH(grpp->num_channels);
   adcp->adc->SQR2  = grpp->sqr2;
   adcp->adc->SQR3  = grpp->sqr3;
   adcp->adc->SQR4  = grpp->sqr4;

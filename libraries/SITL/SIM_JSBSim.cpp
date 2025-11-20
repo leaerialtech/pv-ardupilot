@@ -18,6 +18,8 @@
 
 #include "SIM_JSBSim.h"
 
+#if HAL_SIM_JSBSIM_ENABLED
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -254,7 +256,7 @@ bool JSBSim::start_JSBSim(void)
 /*
   check for stdout from JSBSim
  */
-void JSBSim::check_stdout(void)
+void JSBSim::check_stdout(void) const
 {
     char line[100];
     ssize_t ret = ::read(jsbsim_stdout, line, sizeof(line));
@@ -268,7 +270,7 @@ void JSBSim::check_stdout(void)
 /*
   a simple function to wait for a string on jsbsim_stdout
  */
-bool JSBSim::expect(const char *str)
+bool JSBSim::expect(const char *str) const
 {
     const char *basestr = str;
     while (*str) {
@@ -427,14 +429,14 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
     accel_body = Vector3f(fdm.A_X_pilot, fdm.A_Y_pilot, fdm.A_Z_pilot) * FEET_TO_METERS;
 
     double p, q, r;
-    SITL::convert_body_frame(degrees(fdm.phi), degrees(fdm.theta),
+    SIM::convert_body_frame(degrees(fdm.phi), degrees(fdm.theta),
                              degrees(fdm.phidot), degrees(fdm.thetadot), degrees(fdm.psidot),
                              &p, &q, &r);
     gyro = Vector3f(p, q, r);
 
     velocity_ef = Vector3f(fdm.v_north, fdm.v_east, fdm.v_down) * FEET_TO_METERS;
-    location.lat = degrees(fdm.latitude) * 1.0e7;
-    location.lng = degrees(fdm.longitude) * 1.0e7;
+    location.lat = RAD_TO_DEG_DOUBLE * fdm.latitude * 1.0e7;
+    location.lng = RAD_TO_DEG_DOUBLE * fdm.longitude * 1.0e7;
     location.alt = fdm.agl*100 + home.alt;
     dcm.from_euler(fdm.phi, fdm.theta, fdm.psi);
     airspeed = fdm.vcas * KNOTS_TO_METERS_PER_SECOND;
@@ -443,8 +445,8 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
     // update magnetic field
     update_mag_field_bf();
     
-    rpm1 = fdm.rpm[0];
-    rpm2 = fdm.rpm[1];
+    rpm[0] = fdm.rpm[0];
+    rpm[1] = fdm.rpm[1];
     
     time_now_us = fdm.cur_time;
 }
@@ -481,3 +483,5 @@ void JSBSim::update(const struct sitl_input &input)
 }
 
 } // namespace SITL
+
+#endif  // HAL_SIM_JSBSIM_ENABLED

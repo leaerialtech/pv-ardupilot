@@ -19,7 +19,7 @@
 
 
 /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Jul 2021)//
+//Modified by Leading Edge Aerial Technologies, LLC.           //
 /////////////////////////////////////////////////////////////////
 
 #ifndef FORCE_VERSION_H_INCLUDE
@@ -29,10 +29,26 @@
 #include <AP_Common/AP_FWVersion.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
+/*
+  allow vendors to set AP_CUSTOM_FIRMWARE_STRING in hwdef.dat
+ */
+#ifdef AP_CUSTOM_FIRMWARE_STRING
+#define ACTIVE_FWSTR AP_CUSTOM_FIRMWARE_STRING
+#define ORIGINAL_FWSTR THISFIRMWARE
+#else
+#define ACTIVE_FWSTR THISFIRMWARE
+#define ORIGINAL_FWSTR nullptr
+#endif
+
+/**
+ * The version number should be used when the structure is updated
+ * Major: For breaking changes of the structure
+ * Minor: For new fields that does not brake the structure or corrections
+ */
 const AP_FWVersion AP_FWVersion::fwver{
     // Version header struct
     .header = 0x61706677766572fb, // First 7 MSBs: "apfwver", LSB is the checksum of the previous string: 0xfb
-    .header_version = 0x0100U, // Major and minor version
+    .header_version = 0x0200U, // Major and minor version
     .pointer_size = static_cast<uint8_t>(sizeof(void*)),
     .reserved = 0,
     .vehicle_type = static_cast<uint8_t>(APM_BUILD_DIRECTORY),
@@ -51,8 +67,11 @@ const AP_FWVersion AP_FWVersion::fwver{
 
 //PRECISIONVISION SENDS ITS OWN SPECIAL ID IN PLACE OF THE HASH_STR, THIS ALLOWS CUSTOM GCS TO DETECT
 //#ifndef GIT_VERSION
+
     .fw_string = THISFIRMWARE,
-    .fw_hash_str = PVHASHSTR,  
+    .fw_hash_str = PVHASHSTR,
+      
+
 //#else
    // .fw_string = THISFIRMWARE " (" GIT_VERSION ")",
    // .fw_hash_str = GIT_VERSION,

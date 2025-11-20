@@ -37,6 +37,8 @@ class CANFrame:
             self.MAX_DATA_LENGTH = 64
         else:
             self.MAX_DATA_LENGTH = 8
+        if isinstance(self.data, list):
+            self.data = bytearray(self.data)
 
     def __str__(self):
         if sys.version_info[0] > 2:
@@ -148,4 +150,21 @@ class AbstractDriver(object):
         '''get the current filter list'''
         return None
     
-    
+    def set_bus(self, busnum):
+        '''set the remote bus number to attach to'''
+        pass
+
+    def set_signing_passphrase(self, passphrase):
+        '''set MAVLink2 signing passphrase'''
+        pass
+
+    def stream_progress(self):
+        '''stream progress of the current stream'''
+        pass
+
+    def end_of_stream(self):
+        '''end of stream'''
+        pass
+
+    def send(self, message_id, message, extended=False, canfd=False):
+        self.send_frame(CANFrame(message_id, message, extended, canfd=canfd))

@@ -1,5 +1,5 @@
 /////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
+//Modified by Leading Edge Aerial Technologies, LLC.           //
 /////////////////////////////////////////////////////////////////
 
 
@@ -14,6 +14,7 @@
 enum ap_message : uint8_t {
     MSG_HEARTBEAT,
     MSG_ATTITUDE,
+    MSG_ATTITUDE_QUATERNION,
     MSG_LOCATION,
     MSG_SYS_STATUS,
     MSG_POWER_STATUS,
@@ -31,7 +32,6 @@ enum ap_message : uint8_t {
     MSG_SCALED_PRESSURE,
     MSG_SCALED_PRESSURE2,
     MSG_SCALED_PRESSURE3,
-    MSG_SENSOR_OFFSETS,
     MSG_GPS_RAW,
     MSG_GPS_RTK,
     MSG_GPS2_RAW,
@@ -45,8 +45,8 @@ enum ap_message : uint8_t {
     MSG_FENCE_STATUS,
     MSG_AHRS,
     MSG_SIMSTATE,
+    MSG_SIM_STATE,
     MSG_AHRS2,
-    MSG_AHRS3,
     MSG_HWSTATUS,
     MSG_WIND,
     MSG_RANGEFINDER,
@@ -54,9 +54,14 @@ enum ap_message : uint8_t {
     MSG_TERRAIN,
     MSG_BATTERY2,
     MSG_CAMERA_FEEDBACK,
-    MSG_MOUNT_STATUS,
+    MSG_CAMERA_INFORMATION,
+    MSG_CAMERA_SETTINGS,
+    MSG_CAMERA_FOV_STATUS,
+    MSG_CAMERA_CAPTURE_STATUS,
+    MSG_GIMBAL_DEVICE_ATTITUDE_STATUS,
+    MSG_GIMBAL_MANAGER_INFORMATION,
+    MSG_GIMBAL_MANAGER_STATUS,
     MSG_OPTICAL_FLOW,
-    MSG_GIMBAL_REPORT,
     MSG_MAG_CAL_PROGRESS,
     MSG_MAG_CAL_REPORT,
     MSG_EKF_STATUS_REPORT,
@@ -78,7 +83,21 @@ enum ap_message : uint8_t {
     MSG_NAMED_FLOAT,
     MSG_EXTENDED_SYS_STATE,
     MSG_AUTOPILOT_VERSION,
+    MSG_EFI_STATUS,
+    MSG_GENERATOR_STATUS,
+    MSG_WINCH_STATUS,
+    MSG_WATER_DEPTH,
+    MSG_HIGH_LATENCY2,
+    MSG_AIS_VESSEL,
+    MSG_MCU_STATUS,
+    MSG_UAVIONIX_ADSB_OUT_STATUS,
+    MSG_ATTITUDE_TARGET,
+    MSG_HYGROMETER,
+    MSG_AUTOPILOT_STATE_FOR_GIMBAL_DEVICE,
+    MSG_RELAY_STATUS,
+  ///PRECISIONVISION
     MSG_PV_SPRAY_STATUS,
     MSG_PV_TANK_SENSOR_STATUS,
+  ///////////////////
     MSG_LAST // MSG_LAST must be the last entry in this enum
 };

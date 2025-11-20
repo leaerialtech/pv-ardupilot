@@ -35,41 +35,45 @@
 /*===========================================================================*/
 
 void spi_circular_cb(SPIDriver *spip);
+void spi_error_cb(SPIDriver *spip);
 
 /*
  * Circular SPI configuration (25MHz, CPHA=0, CPOL=0, MSb first).
  */
 const SPIConfig c_spicfg = {
-  true,
-  spi_circular_cb,
-  GPIOD,
-  GPIOD_SPI1_NSS,
-  SPI_CFG1_MBR_DIV8 | SPI_CFG1_DSIZE_VALUE(7),
-  0
+  .circular         = true,
+  .data_cb          = spi_circular_cb,
+  .error_cb         = spi_error_cb,
+  .ssport           = GPIOD,
+  .sspad            = 14U,
+  .cfg1             = SPI_CFG1_MBR_DIV8 | SPI_CFG1_DSIZE_VALUE(7),
+  .cfg2             = 0U
 };
 
 /*
  * Maximum speed SPI configuration (25MHz, CPHA=0, CPOL=0, MSb first).
  */
 const SPIConfig hs_spicfg = {
-  false,
-  NULL,
-  GPIOD,
-  GPIOD_SPI1_NSS,
-  SPI_CFG1_MBR_DIV8 | SPI_CFG1_DSIZE_VALUE(7),
-  0
+  .circular         = false,
+  .data_cb          = NULL,
+  .error_cb         = spi_error_cb,
+  .ssport           = GPIOD,
+  .sspad            = 14U,
+  .cfg1             = SPI_CFG1_MBR_DIV8 | SPI_CFG1_DSIZE_VALUE(7),
+  .cfg2             = 0U
 };
 
 /*
  * Low speed SPI configuration (1.5625MHz, CPHA=0, CPOL=0, MSb first).
  */
 const SPIConfig ls_spicfg = {
-  false,
-  NULL,
-  GPIOD,
-  GPIOD_SPI1_NSS,
-  SPI_CFG1_MBR_DIV128 | SPI_CFG1_DSIZE_VALUE(7),
-  0
+  .circular         = false,
+  .data_cb          = NULL,
+  .error_cb         = spi_error_cb,
+  .ssport           = GPIOD,
+  .sspad            = 14U,
+  .cfg1             = SPI_CFG1_MBR_DIV128 | SPI_CFG1_DSIZE_VALUE(7),
+  .cfg2             = 0U
 };
 
 /*===========================================================================*/
@@ -93,11 +97,11 @@ void portab_setup(void) {
   /*
    * SPI1 I/O pins setup.
    */
-  palSetLineMode(LINE_SPI1_SCK, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
-  palSetLineMode(LINE_SPI1_MISO, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
-  palSetLineMode(LINE_SPI1_MOSI, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
-  palSetLineMode(LINE_SPI1_NSS, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST);
-  palSetLine(LINE_SPI1_NSS);
+  palSetPadMode(GPIOA, 5, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(GPIOA, 6, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(GPIOB, 5, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
+  palSetPadMode(GPIOD, 14, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST);
+  palSetPad(GPIOD, 14);
 }
 
 /** @} */

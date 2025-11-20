@@ -75,12 +75,12 @@
  * @brief   Driver state machine possible states.
  */
 typedef enum {
-  I2C_UNINIT = 0,                           /**< Not initialized.           */
-  I2C_STOP = 1,                             /**< Stopped.                   */
-  I2C_READY = 2,                            /**< Ready.                     */
-  I2C_ACTIVE_TX = 3,                        /**< Transmitting.              */
-  I2C_ACTIVE_RX = 4,                        /**< Receiving.                 */
-  I2C_LOCKED = 5                            /**> Bus or driver locked.      */
+  I2C_UNINIT = 0,                           /**< @brief Not initialized.    */
+  I2C_STOP = 1,                             /**< @brief Stopped.            */
+  I2C_READY = 2,                            /**< @brief Ready.              */
+  I2C_ACTIVE_TX = 3,                        /**< @brief Transmitting.       */
+  I2C_ACTIVE_RX = 4,                        /**< @brief Receiving.          */
+  I2C_LOCKED = 5                            /**< @brief Bus locked.         */
 } i2cstate_t;
 
 #include "hal_i2c_lld.h"
@@ -100,7 +100,7 @@ typedef enum {
   osalSysLockFromISR();                                                     \
   osalThreadResumeI(&(i2cp)->thread, MSG_OK);                               \
   osalSysUnlockFromISR();                                                   \
-} while(0)
+} while (0)
 
 /**
  * @brief   Wakes up the waiting thread notifying errors.
@@ -113,7 +113,7 @@ typedef enum {
   osalSysLockFromISR();                                                     \
   osalThreadResumeI(&(i2cp)->thread, MSG_RESET);                            \
   osalSysUnlockFromISR();                                                   \
-} while(0)
+} while (0)
 
 /**
  * @brief   Wrap i2cMasterTransmitTimeout function with TIME_INFINITE timeout.
@@ -139,7 +139,7 @@ extern "C" {
 #endif
   void i2cInit(void);
   void i2cObjectInit(I2CDriver *i2cp);
-  void i2cStart(I2CDriver *i2cp, const I2CConfig *config);
+  msg_t i2cStart(I2CDriver *i2cp, const I2CConfig *config);
   void i2cStop(I2CDriver *i2cp);
   void i2cSoftStop(I2CDriver *i2cp);
   i2cflags_t i2cGetErrors(I2CDriver *i2cp);

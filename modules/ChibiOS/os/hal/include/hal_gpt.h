@@ -111,6 +111,23 @@ typedef void (*gptcallback_t)(GPTDriver *gptp);
  */
 #define gptGetCounterX(gptp) gpt_lld_get_counter(gptp)
 
+/**
+ * @brief   Common ISR code, GPT period event.
+ *
+ * @param[in] gptp      pointer to the @p GPTDriver object
+ *
+ * @notapi
+ */
+#define _gpt_isr_invoke_cb(gptp) do {                                       \
+  if ((gptp)->state == GPT_ONESHOT) {                                       \
+    (gptp)->state = GPT_READY;                                              \
+      gpt_lld_stop_timer(gptp);                                             \
+    }                                                                       \
+    if ((gptp)->config->callback != NULL) {                                 \
+      (gptp)->config->callback(gptp);                                       \
+    }                                                                       \
+} while (0)
+
 /*===========================================================================*/
 /* External declarations.                                                    */
 /*===========================================================================*/
@@ -120,7 +137,7 @@ extern "C" {
 #endif
   void gptInit(void);
   void gptObjectInit(GPTDriver *gptp);
-  void gptStart(GPTDriver *gptp, const GPTConfig *config);
+  msg_t gptStart(GPTDriver *gptp, const GPTConfig *config);
   void gptStop(GPTDriver *gptp);
   void gptStartContinuous(GPTDriver *gptp, gptcnt_t interval);
   void gptStartContinuousI(GPTDriver *gptp, gptcnt_t interval);

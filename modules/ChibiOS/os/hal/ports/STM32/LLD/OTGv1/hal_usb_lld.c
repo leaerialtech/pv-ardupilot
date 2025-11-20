@@ -156,12 +156,16 @@ static void otg_disable_ep(USBDriver *usbp) {
   unsigned i;
 
   for (i = 0; i <= usbp->otgparams->num_endpoints; i++) {
-    otgp->ie[i].DIEPCTL = 0;
-    otgp->ie[i].DIEPTSIZ = 0;
-    otgp->ie[i].DIEPINT = 0xFFFFFFFF;
 
-    otgp->oe[i].DOEPCTL = 0;
-    otgp->oe[i].DOEPTSIZ = 0;
+    if ((otgp->ie[i].DIEPCTL & DIEPCTL_EPENA) != 0U) {
+      otgp->ie[i].DIEPCTL |= DIEPCTL_EPDIS;
+    }
+
+    if ((otgp->oe[i].DOEPCTL & DIEPCTL_EPENA) != 0U) {
+      otgp->oe[i].DOEPCTL |= DIEPCTL_EPDIS;
+    }
+
+    otgp->ie[i].DIEPINT = 0xFFFFFFFF;
     otgp->oe[i].DOEPINT = 0xFFFFFFFF;
   }
   otgp->DAINTMSK = DAINTMSK_OEPM(0) | DAINTMSK_IEPM(0);
@@ -260,7 +264,7 @@ static void otg_fifo_read_to_buffer(volatile uint32_t *fifop,
   size_t i = 0;
 
   while (i < n) {
-    if ((i & 3) == 0){
+    if ((i & 3) == 0) {
       w = *fifop;
     }
     if (i < max) {
@@ -474,20 +478,17 @@ static void otg_isoc_in_failed_handler(USBDriver *usbp) {
   for (ep = 0; ep <= usbp->otgparams->num_endpoints; ep++) {
     if (((otgp->ie[ep].DIEPCTL & DIEPCTL_EPTYP_MASK) == DIEPCTL_EPTYP_ISO) &&
         ((otgp->ie[ep].DIEPCTL & DIEPCTL_EPENA) != 0)) {
-      /* Endpoint enabled -> ISOC IN transfer failed */
-      /* Disable endpoint */
+      /* Endpoint enabled -> ISOC IN transfer failed.*/
+      /* Disable endpoint.*/
       otgp->ie[ep].DIEPCTL |= (DIEPCTL_EPDIS | DIEPCTL_SNAK);
       while (otgp->ie[ep].DIEPCTL & DIEPCTL_EPENA)
         ;
 
-      /* Flush FIFO */
+      /* Flush FIFO.*/
       otg_txfifo_flush(usbp, ep);
 
-      /* Prepare data for next frame */
+      /* Prepare data for next frame.*/
       _usb_isr_invoke_in_cb(usbp, ep);
-
-      /* TX FIFO empty or emptying.*/
-      otg_txfifo_handler(usbp, ep);
     }
   }
 }
@@ -506,13 +507,15 @@ static void otg_isoc_out_failed_handler(USBDriver *usbp) {
   for (ep = 0; ep <= usbp->otgparams->num_endpoints; ep++) {
     if (((otgp->oe[ep].DOEPCTL & DOEPCTL_EPTYP_MASK) == DOEPCTL_EPTYP_ISO) &&
         ((otgp->oe[ep].DOEPCTL & DOEPCTL_EPENA) != 0)) {
-      /* Endpoint enabled -> ISOC OUT transfer failed */
-      /* Disable endpoint */
-      /* FIXME: Core stucks here */
-      /*otgp->oe[ep].DOEPCTL |= (DOEPCTL_EPDIS | DOEPCTL_SNAK);
+#if 0
+      /* Endpoint enabled -> ISOC OUT transfer failed.*/
+      /* Disable endpoint.*/
+      /* CHTODO:: Core stucks here */
+      otgp->oe[ep].DOEPCTL |= (DOEPCTL_EPDIS | DOEPCTL_SNAK);
       while (otgp->oe[ep].DOEPCTL & DOEPCTL_EPENA)
-        ;*/
-      /* Prepare transfer for next frame */
+        ;
+#endif
+      /* Prepare transfer for next frame.*/
       _usb_isr_invoke_out_cb(usbp, ep);
     }
   }
@@ -559,6 +562,9 @@ static void usb_lld_serve_interrupt(USBDriver *usbp) {
 
   /* Suspend handling.*/
   if (sts & GINTSTS_USBSUSP) {
+    /* Stopping all ongoing transfers.*/
+    otg_disable_ep(usbp);
+
     /* Default suspend action.*/
     _usb_suspend(usbp);
   }
@@ -578,6 +584,21 @@ static void usb_lld_serve_interrupt(USBDriver *usbp) {
 
   /* SOF interrupt handling.*/
   if (sts & GINTSTS_SOF) {
+    /* SOF interrupt was used to detect resume of the USB bus after issuing a
+       remote wake up of the host, therefore we disable it again.*/
+    if (usbp->config->sof_cb == NULL) {
+      otgp->GINTMSK &= ~GINTMSK_SOFM;
+    }
+    if (usbp->state == USB_SUSPENDED) {
+      /* If clocks are gated off, turn them back on (may be the case if
+         coming out of suspend mode).*/
+      if (otgp->PCGCCTL & (PCGCCTL_STPPCLK | PCGCCTL_GATEHCLK)) {
+        /* Set to zero to un-gate the USB core clocks.*/
+        otgp->PCGCCTL &= ~(PCGCCTL_STPPCLK | PCGCCTL_GATEHCLK);
+      }
+      _usb_wakeup(usbp);
+    }
+
     _usb_isr_invoke_sof_cb(usbp);
   }
 
@@ -756,6 +777,11 @@ void usb_lld_start(USBDriver *usbp) {
 
       /* 48MHz 1.1 PHY.*/
       otgp->DCFG = 0x02200000 | DCFG_DSPD_FS11;
+
+#if CORTEX_ENABLE_WFI_IDLE == TRUE
+      // enable USB with WFI
+      rccDisableUSB2_HSULPI();
+#endif
     }
 #endif
 
@@ -891,7 +917,7 @@ void usb_lld_stop(USBDriver *usbp) {
       nvicDisableVector(STM32_OTG2_NUMBER);
       rccDisableOTG_HS();
 #if defined(BOARD_OTG2_USES_ULPI)
-      rccDisableOTG_HSULPI()
+      rccDisableOTG_HSULPI();
 #endif
     }
 #endif
@@ -1141,7 +1167,7 @@ void usb_lld_start_out(USBDriver *usbp, usbep_t ep) {
            usbp->epc[ep]->out_maxsize;
   rxsize = (pcnt * usbp->epc[ep]->out_maxsize + 3U) & 0xFFFFFFFCU;
 
-  /*Setting up transaction parameters in DOEPTSIZ.*/
+  /* Setting up transaction parameters in DOEPTSIZ.*/
   usbp->otg->oe[ep].DOEPTSIZ = DOEPTSIZ_STUPCNT(3) | DOEPTSIZ_PKTCNT(pcnt) |
                                DOEPTSIZ_XFRSIZ(rxsize);
 
@@ -1182,7 +1208,7 @@ void usb_lld_start_in(USBDriver *usbp, usbep_t ep) {
     /* Normal case.*/
     uint32_t pcnt = (isp->txsize + usbp->epc[ep]->in_maxsize - 1) /
                     usbp->epc[ep]->in_maxsize;
-    /* TODO: Support more than one packet per frame for isochronous transfers.*/
+    /* CHTODO: Support more than one packet per frame for isochronous transfers.*/
     usbp->otg->ie[ep].DIEPTSIZ = DIEPTSIZ_MCNT(1) | DIEPTSIZ_PKTCNT(pcnt) |
                                  DIEPTSIZ_XFRSIZ(isp->txsize);
   }

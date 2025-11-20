@@ -8,9 +8,6 @@
 #include <Filter/Filter.h>
 #include <Filter/LowPassFilter.h>
 #include <AC_PID/AC_P.h>
-#include <AP_InertialNav/AP_InertialNav.h>
-#include <AP_AHRS/AP_AHRS.h>
-#include <AP_HAL/AP_HAL.h>
 
 
 class AC_Autorotation
@@ -18,7 +15,7 @@ class AC_Autorotation
 public:
 
     //Constructor
-    AC_Autorotation(AP_InertialNav& inav);
+    AC_Autorotation();
 
     //--------Functions--------
     void init_hs_controller(void);  // Initialise head speed controller
@@ -34,8 +31,8 @@ public:
     float get_bail_time(void) { return _param_bail_time; }
     float get_last_collective() const { return _collective_out; }
     bool is_enable(void) { return _param_enable; }
-    void Log_Write_Autorotation(void);
-    void update_forward_speed_controller(void);  // Update foward speed controller
+    void Log_Write_Autorotation(void) const;
+    void update_forward_speed_controller(void);  // Update forward speed controller
     void set_desired_fwd_speed(void) { _vel_target = _param_target_speed; } // Overloaded: Set desired speed for forward controller to parameter value
     void set_desired_fwd_speed(float speed) { _vel_target = speed; } // Overloaded: Set desired speed to argument value
     int32_t get_pitch(void) const { return _pitch_target; }  // Get pitch target
@@ -51,7 +48,6 @@ private:
     float _current_rpm;
     float _collective_out;
     float _head_speed_error;         // Error between target head speed and current head speed.  Normalised by head speed set point RPM.
-    uint16_t _log_counter;
     float _col_cutoff_freq;          // Lowpass filter cutoff frequency (Hz) for collective.
     uint8_t _unhealthy_rpm_counter;  // Counter used to track RPM sensor unhealthy signal.
     uint8_t _healthy_rpm_counter;    // Counter used to track RPM sensor healthy signal.
@@ -61,7 +57,6 @@ private:
 
     float _vel_target;               // Forward velocity target.
     float _pitch_target;             // Pitch angle target.
-    float _vel_error;                // Velocity error.
     float _accel_max;                // Maximum acceleration limit.
     int16_t _speed_forward_last;       // The forward speed calculated in the previous cycle.
     bool _flag_limit_accel;          // Maximum acceleration limit reached flag.
@@ -97,12 +92,8 @@ private:
     } _flags;
 
     //--------Internal Functions--------
-    void set_collective(float _collective_filter_cutoff);
+    void set_collective(float _collective_filter_cutoff) const;
 
     // low pass filter for collective trim
     LowPassFilterFloat col_trim_lpf;
-
-    //--------References to Other Libraries--------
-    AP_InertialNav&    _inav;
-
 };

@@ -12,52 +12,103 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "benchmark/reporter.h"
-
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <iomanip>  // for setprecision
 #include <iostream>
+#include <limits>
 #include <string>
+#include <tuple>
 #include <vector>
 
+#include "benchmark/benchmark.h"
+#include "complexity.h"
 #include "string_util.h"
-#include "walltime.h"
+#include "timers.h"
 
 namespace benchmark {
-
 namespace {
 
+std::string StrEscape(const std::string& s) {
+  std::string tmp;
+  tmp.reserve(s.size());
+  for (char c : s) {
+    switch (c) {
+      case '\b':
+        tmp += "\\b";
+        break;
+      case '\f':
+        tmp += "\\f";
+        break;
+      case '\n':
+        tmp += "\\n";
+        break;
+      case '\r':
+        tmp += "\\r";
+        break;
+      case '\t':
+        tmp += "\\t";
+        break;
+      case '\\':
+        tmp += "\\\\";
+        break;
+      case '"':
+        tmp += "\\\"";
+        break;
+      default:
+        tmp += c;
+        break;
+    }
+  }
+  return tmp;
+}
+
 std::string FormatKV(std::string const& key, std::string const& value) {
-  return StringPrintF("\"%s\": \"%s\"", key.c_str(), value.c_str());
+  return StrFormat("\"%s\": \"%s\"", StrEscape(key).c_str(),
+                   StrEscape(value).c_str());
 }
 
 std::string FormatKV(std::string const& key, const char* value) {
-  return StringPrintF("\"%s\": \"%s\"", key.c_str(), value);
+  return StrFormat("\"%s\": \"%s\"", StrEscape(key).c_str(),
+                   StrEscape(value).c_str());
 }
 
 std::string FormatKV(std::string const& key, bool value) {
-  return StringPrintF("\"%s\": %s", key.c_str(), value ? "true" : "false");
+  return StrFormat("\"%s\": %s", StrEscape(key).c_str(),
+                   value ? "true" : "false");
 }
 
 std::string FormatKV(std::string const& key, int64_t value) {
   std::stringstream ss;
-  ss << '"' << key << "\": " << value;
+  ss << '"' << StrEscape(key) << "\": " << value;
   return ss.str();
 }
 
-std::string FormatKV(std::string const& key, std::size_t value) {
+std::string FormatKV(std::string const& key, double value) {
   std::stringstream ss;
-  ss << '"' << key << "\": " << value;
+  ss << '"' << StrEscape(key) << "\": ";
+
+  if (std::isnan(value))
+    ss << (value < 0 ? "-" : "") << "NaN";
+  else if (std::isinf(value))
+    ss << (value < 0 ? "-" : "") << "Infinity";
+  else {
+    const auto max_digits10 =
+        std::numeric_limits<decltype(value)>::max_digits10;
+    const auto max_fractional_digits10 = max_digits10 - 1;
+    ss << std::scientific << std::setprecision(max_fractional_digits10)
+       << value;
+  }
   return ss.str();
 }
 
-int64_t RoundDouble(double v) {
-    return static_cast<int64_t>(v + 0.5);
-}
+int64_t RoundDouble(double v) { return std::lround(v); }
 
-} // end namespace
+}  // end namespace
 
 bool JSONReporter::ReportContext(const Context& context) {
-  std::ostream& out = std::cout;
+  std::ostream& out = GetOutputStream();
 
   out << "{\n";
   std::string inner_indent(2, ' ');
@@ -69,22 +120,71 @@ bool JSONReporter::ReportContext(const Context& context) {
   std::string walltime_value = LocalDateTimeString();
   out << indent << FormatKV("date", walltime_value) << ",\n";
 
-  out << indent
-      << FormatKV("num_cpus", static_cast<int64_t>(context.num_cpus))
+  out << indent << FormatKV("host_name", context.sys_info.name) << ",\n";
+
+  if (Context::executable_name) {
+    out << indent << FormatKV("executable", Context::executable_name) << ",\n";
+  }
+
+  CPUInfo const& info = context.cpu_info;
+  out << indent << FormatKV("num_cpus", static_cast<int64_t>(info.num_cpus))
       << ",\n";
   out << indent
-      << FormatKV("mhz_per_cpu", RoundDouble(context.mhz_per_cpu))
+      << FormatKV("mhz_per_cpu",
+                  RoundDouble(info.cycles_per_second / 1000000.0))
       << ",\n";
-  out << indent
-      << FormatKV("cpu_scaling_enabled", context.cpu_scaling_enabled)
-      << ",\n";
+  if (CPUInfo::Scaling::UNKNOWN != info.scaling) {
+    out << indent
+        << FormatKV("cpu_scaling_enabled",
+                    info.scaling == CPUInfo::Scaling::ENABLED ? true : false)
+        << ",\n";
+  }
+
+  out << indent << "\"caches\": [\n";
+  indent = std::string(6, ' ');
+  std::string cache_indent(8, ' ');
+  for (size_t i = 0; i < info.caches.size(); ++i) {
+    auto& CI = info.caches[i];
+    out << indent << "{\n";
+    out << cache_indent << FormatKV("type", CI.type) << ",\n";
+    out << cache_indent << FormatKV("level", static_cast<int64_t>(CI.level))
+        << ",\n";
+    out << cache_indent << FormatKV("size", static_cast<int64_t>(CI.size))
+        << ",\n";
+    out << cache_indent
+        << FormatKV("num_sharing", static_cast<int64_t>(CI.num_sharing))
+        << "\n";
+    out << indent << "}";
+    if (i != info.caches.size() - 1) out << ",";
+    out << "\n";
+  }
+  indent = std::string(4, ' ');
+  out << indent << "],\n";
+  out << indent << "\"load_avg\": [";
+  for (auto it = info.load_avg.begin(); it != info.load_avg.end();) {
+    out << *it++;
+    if (it != info.load_avg.end()) out << ",";
+  }
+  out << "],\n";
 
 #if defined(NDEBUG)
   const char build_type[] = "release";
 #else
   const char build_type[] = "debug";
 #endif
-  out << indent << FormatKV("build_type", build_type) << "\n";
+  out << indent << FormatKV("library_build_type", build_type);
+
+  std::map<std::string, std::string>* global_context =
+      internal::GetGlobalContext();
+
+  if (global_context != nullptr) {
+    for (const auto& kv : *global_context) {
+      out << ",\n";
+      out << indent << FormatKV(kv.first, kv.second);
+    }
+  }
+  out << "\n";
+
   // Close context block and open the list of benchmarks.
   out << inner_indent << "},\n";
   out << inner_indent << "\"benchmarks\": [\n";
@@ -96,70 +196,121 @@ void JSONReporter::ReportRuns(std::vector<Run> const& reports) {
     return;
   }
   std::string indent(4, ' ');
-  std::ostream& out = std::cout;
+  std::ostream& out = GetOutputStream();
   if (!first_report_) {
     out << ",\n";
   }
   first_report_ = false;
-  std::vector<Run> reports_cp = reports;
-  if (reports.size() >= 2) {
-    Run mean_data;
-    Run stddev_data;
-    BenchmarkReporter::ComputeStats(reports, &mean_data, &stddev_data);
-    reports_cp.push_back(mean_data);
-    reports_cp.push_back(stddev_data);
-  }
-  for (auto it = reports_cp.begin(); it != reports_cp.end(); ++it) {
-     out << indent << "{\n";
-     PrintRunData(*it);
-     out << indent << '}';
-     auto it_cp = it;
-     if (++it_cp != reports_cp.end()) {
-         out << ",\n";
-     }
+
+  for (auto it = reports.begin(); it != reports.end(); ++it) {
+    out << indent << "{\n";
+    PrintRunData(*it);
+    out << indent << '}';
+    auto it_cp = it;
+    if (++it_cp != reports.end()) {
+      out << ",\n";
+    }
   }
 }
 
 void JSONReporter::Finalize() {
-    // Close the list of benchmarks and the top level object.
-    std::cout << "\n  ]\n}\n";
+  // Close the list of benchmarks and the top level object.
+  GetOutputStream() << "\n  ]\n}\n";
 }
 
 void JSONReporter::PrintRunData(Run const& run) {
-    double const multiplier = 1e9; // nano second multiplier
-    double cpu_time = run.cpu_accumulated_time * multiplier;
-    double real_time = run.real_accumulated_time * multiplier;
-    if (run.iterations != 0) {
-        real_time = real_time / static_cast<double>(run.iterations);
-        cpu_time = cpu_time / static_cast<double>(run.iterations);
+  std::string indent(6, ' ');
+  std::ostream& out = GetOutputStream();
+  out << indent << FormatKV("name", run.benchmark_name()) << ",\n";
+  out << indent << FormatKV("family_index", run.family_index) << ",\n";
+  out << indent
+      << FormatKV("per_family_instance_index", run.per_family_instance_index)
+      << ",\n";
+  out << indent << FormatKV("run_name", run.run_name.str()) << ",\n";
+  out << indent << FormatKV("run_type", [&run]() -> const char* {
+    switch (run.run_type) {
+      case BenchmarkReporter::Run::RT_Iteration:
+        return "iteration";
+      case BenchmarkReporter::Run::RT_Aggregate:
+        return "aggregate";
     }
+    BENCHMARK_UNREACHABLE();
+  }()) << ",\n";
+  out << indent << FormatKV("repetitions", run.repetitions) << ",\n";
+  if (run.run_type != BenchmarkReporter::Run::RT_Aggregate) {
+    out << indent << FormatKV("repetition_index", run.repetition_index)
+        << ",\n";
+  }
+  out << indent << FormatKV("threads", run.threads) << ",\n";
+  if (run.run_type == BenchmarkReporter::Run::RT_Aggregate) {
+    out << indent << FormatKV("aggregate_name", run.aggregate_name) << ",\n";
+    out << indent << FormatKV("aggregate_unit", [&run]() -> const char* {
+      switch (run.aggregate_unit) {
+        case StatisticUnit::kTime:
+          return "time";
+        case StatisticUnit::kPercentage:
+          return "percentage";
+      }
+      BENCHMARK_UNREACHABLE();
+    }()) << ",\n";
+  }
+  if (run.error_occurred) {
+    out << indent << FormatKV("error_occurred", run.error_occurred) << ",\n";
+    out << indent << FormatKV("error_message", run.error_message) << ",\n";
+  }
+  if (!run.report_big_o && !run.report_rms) {
+    out << indent << FormatKV("iterations", run.iterations) << ",\n";
+    if (run.run_type != Run::RT_Aggregate ||
+        run.aggregate_unit == StatisticUnit::kTime) {
+      out << indent << FormatKV("real_time", run.GetAdjustedRealTime())
+          << ",\n";
+      out << indent << FormatKV("cpu_time", run.GetAdjustedCPUTime());
+    } else {
+      assert(run.aggregate_unit == StatisticUnit::kPercentage);
+      out << indent << FormatKV("real_time", run.real_accumulated_time)
+          << ",\n";
+      out << indent << FormatKV("cpu_time", run.cpu_accumulated_time);
+    }
+    out << ",\n"
+        << indent << FormatKV("time_unit", GetTimeUnitString(run.time_unit));
+  } else if (run.report_big_o) {
+    out << indent << FormatKV("cpu_coefficient", run.GetAdjustedCPUTime())
+        << ",\n";
+    out << indent << FormatKV("real_coefficient", run.GetAdjustedRealTime())
+        << ",\n";
+    out << indent << FormatKV("big_o", GetBigOString(run.complexity)) << ",\n";
+    out << indent << FormatKV("time_unit", GetTimeUnitString(run.time_unit));
+  } else if (run.report_rms) {
+    out << indent << FormatKV("rms", run.GetAdjustedCPUTime());
+  }
 
-    std::string indent(6, ' ');
-    std::ostream& out = std::cout;
-    out << indent
-        << FormatKV("name", run.benchmark_name)
-        << ",\n";
-    out << indent
-        << FormatKV("iterations", run.iterations)
-        << ",\n";
-    out << indent
-        << FormatKV("real_time", RoundDouble(real_time))
-        << ",\n";
-    out << indent
-        << FormatKV("cpu_time", RoundDouble(cpu_time));
-    if (run.bytes_per_second > 0.0) {
-        out << ",\n" << indent
-            << FormatKV("bytes_per_second", RoundDouble(run.bytes_per_second));
-    }
-    if (run.items_per_second > 0.0) {
-        out << ",\n" << indent
-            << FormatKV("items_per_second", RoundDouble(run.items_per_second));
-    }
-    if (!run.report_label.empty()) {
-        out << ",\n" << indent
-            << FormatKV("label", run.report_label);
-    }
-    out << '\n';
+  for (auto& c : run.counters) {
+    out << ",\n" << indent << FormatKV(c.first, c.second);
+  }
+
+  if (run.memory_result) {
+    const MemoryManager::Result memory_result = *run.memory_result;
+    out << ",\n" << indent << FormatKV("allocs_per_iter", run.allocs_per_iter);
+    out << ",\n"
+        << indent << FormatKV("max_bytes_used", memory_result.max_bytes_used);
+
+    auto report_if_present = [&out, &indent](const char* label, int64_t val) {
+      if (val != MemoryManager::TombstoneValue)
+        out << ",\n" << indent << FormatKV(label, val);
+    };
+
+    report_if_present("total_allocated_bytes",
+                      memory_result.total_allocated_bytes);
+    report_if_present("net_heap_growth", memory_result.net_heap_growth);
+  }
+
+  if (!run.report_label.empty()) {
+    out << ",\n" << indent << FormatKV("label", run.report_label);
+  }
+  out << '\n';
 }
 
-} // end namespace benchmark
+const int64_t MemoryManager::TombstoneValue =
+    std::numeric_limits<int64_t>::max();
+
+}  // end namespace benchmark

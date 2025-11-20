@@ -30,51 +30,51 @@
 /* Driver local definitions.                                                 */
 /*===========================================================================*/
 
-#define SPI1_RX_DMA_STREAM                                                 \
+#define SPI1_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI1_RX_DMA_STREAM,                        \
                        STM32_SPI1_RX_DMA_CHN)
 
-#define SPI1_TX_DMA_STREAM                                                 \
+#define SPI1_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI1_TX_DMA_STREAM,                        \
                        STM32_SPI1_TX_DMA_CHN)
 
-#define SPI2_RX_DMA_STREAM                                                 \
+#define SPI2_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI2_RX_DMA_STREAM,                        \
                        STM32_SPI2_RX_DMA_CHN)
 
-#define SPI2_TX_DMA_STREAM                                                 \
+#define SPI2_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI2_TX_DMA_STREAM,                        \
                        STM32_SPI2_TX_DMA_CHN)
 
-#define SPI3_RX_DMA_STREAM                                                 \
+#define SPI3_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI3_RX_DMA_STREAM,                        \
                        STM32_SPI3_RX_DMA_CHN)
 
-#define SPI3_TX_DMA_STREAM                                                 \
+#define SPI3_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI3_TX_DMA_STREAM,                        \
                        STM32_SPI3_TX_DMA_CHN)
 
-#define SPI4_RX_DMA_STREAM                                                 \
+#define SPI4_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI4_RX_DMA_STREAM,                        \
                        STM32_SPI4_RX_DMA_CHN)
 
-#define SPI4_TX_DMA_STREAM                                                 \
+#define SPI4_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI4_TX_DMA_STREAM,                        \
                        STM32_SPI4_TX_DMA_CHN)
 
-#define SPI5_RX_DMA_STREAM                                                 \
+#define SPI5_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI5_RX_DMA_STREAM,                        \
                        STM32_SPI5_RX_DMA_CHN)
 
-#define SPI5_TX_DMA_STREAM                                                 \
+#define SPI5_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI5_TX_DMA_STREAM,                        \
                        STM32_SPI5_TX_DMA_CHN)
 
-#define SPI6_RX_DMA_STREAM                                                 \
+#define SPI6_RX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI6_RX_DMA_STREAM,                        \
                        STM32_SPI6_RX_DMA_CHN)
 
-#define SPI6_TX_DMA_STREAM                                                 \
+#define SPI6_TX_DMA_STREAM                                                  \
   STM32_DMA_GETCHANNEL(STM32_SPI_SPI6_TX_DMA_STREAM,                        \
                        STM32_SPI6_TX_DMA_CHN)
 
@@ -565,7 +565,7 @@ void spi_lld_unselect(SPIDriver *spip) {
  */
 void spi_lld_ignore(SPIDriver *spip, size_t n) {
 
-  osalDbgAssert(n < 65536, "unsupported DMA transfer size");
+  osalDbgAssert(n <= STM32_DMA_MAX_TRANSFER, "unsupported DMA transfer size");
 
   dmaStreamSetMemory0(spip->dmarx, &dummyrx);
   dmaStreamSetTransactionSize(spip->dmarx, n);
@@ -597,7 +597,7 @@ void spi_lld_ignore(SPIDriver *spip, size_t n) {
 void spi_lld_exchange(SPIDriver *spip, size_t n,
                       const void *txbuf, void *rxbuf) {
 
-  osalDbgAssert(n < 65536, "unsupported DMA transfer size");
+  osalDbgAssert(n <= STM32_DMA_MAX_TRANSFER, "unsupported DMA transfer size");
 
   dmaStreamSetMemory0(spip->dmarx, rxbuf);
   dmaStreamSetTransactionSize(spip->dmarx, n);
@@ -626,7 +626,7 @@ void spi_lld_exchange(SPIDriver *spip, size_t n,
  */
 void spi_lld_send(SPIDriver *spip, size_t n, const void *txbuf) {
 
-  osalDbgAssert(n < 65536, "unsupported DMA transfer size");
+  osalDbgAssert(n <= STM32_DMA_MAX_TRANSFER, "unsupported DMA transfer size");
 
   dmaStreamSetMemory0(spip->dmarx, &dummyrx);
   dmaStreamSetTransactionSize(spip->dmarx, n);
@@ -655,7 +655,7 @@ void spi_lld_send(SPIDriver *spip, size_t n, const void *txbuf) {
  */
 void spi_lld_receive(SPIDriver *spip, size_t n, void *rxbuf) {
 
-  osalDbgAssert(n < 65536, "unsupported DMA transfer size");
+  osalDbgAssert(n <= STM32_DMA_MAX_TRANSFER, "unsupported DMA transfer size");
 
   dmaStreamSetMemory0(spip->dmarx, rxbuf);
   dmaStreamSetTransactionSize(spip->dmarx, n);

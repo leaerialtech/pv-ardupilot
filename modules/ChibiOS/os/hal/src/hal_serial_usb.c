@@ -61,7 +61,7 @@ static bool sdu_start_receive(SerialUSBDriver *sdup) {
   }
 
   /* Checking if there is already a transaction ongoing on the endpoint.*/
-  if (usbGetReceiveStatusI(sdup->config->usbp, sdup->config->bulk_in)) {
+  if (usbGetReceiveStatusI(sdup->config->usbp, sdup->config->bulk_out)) {
     return true;
   }
 
@@ -141,7 +141,7 @@ static msg_t _ctl(void *ip, unsigned int operation, void *arg) {
   default:
 #if defined(SDU_LLD_IMPLEMENTS_CTL)
     /* The SDU driver does not have a LLD but the application can use this
-       hook to implement extra controls by supplying this function.*/ 
+       hook to implement extra controls by supplying this function.*/
     extern msg_t sdu_lld_control(SerialUSBDriver *sdup,
                                  unsigned int operation,
                                  void *arg);
@@ -237,10 +237,11 @@ void sduObjectInit(SerialUSBDriver *sdup) {
  *
  * @param[in] sdup      pointer to a @p SerialUSBDriver object
  * @param[in] config    the serial over USB driver configuration
+ * @return              The operation status.
  *
  * @api
  */
-void sduStart(SerialUSBDriver *sdup, const SerialUSBConfig *config) {
+msg_t sduStart(SerialUSBDriver *sdup, const SerialUSBConfig *config) {
   USBDriver *usbp = config->usbp;
 
   osalDbgCheck(sdup != NULL);
@@ -248,6 +249,7 @@ void sduStart(SerialUSBDriver *sdup, const SerialUSBConfig *config) {
   osalSysLock();
   osalDbgAssert((sdup->state == SDU_STOP) || (sdup->state == SDU_READY),
                 "invalid state");
+
   usbp->in_params[config->bulk_in - 1U]   = sdup;
   usbp->out_params[config->bulk_out - 1U] = sdup;
   if (config->int_in > 0U) {
@@ -255,7 +257,10 @@ void sduStart(SerialUSBDriver *sdup, const SerialUSBConfig *config) {
   }
   sdup->config = config;
   sdup->state = SDU_READY;
+
   osalSysUnlock();
+
+  return HAL_RET_SUCCESS;
 }
 
 /**
@@ -310,7 +315,7 @@ void sduStop(SerialUSBDriver *sdup) {
 void sduSuspendHookI(SerialUSBDriver *sdup) {
 
   /* Avoiding events spam.*/
-  if(bqIsSuspendedX(&sdup->ibqueue) && bqIsSuspendedX(&sdup->obqueue)) {
+  if (bqIsSuspendedX(&sdup->ibqueue) && bqIsSuspendedX(&sdup->obqueue)) {
     return;
   }
   chnAddFlagsI(sdup, CHN_DISCONNECTED);

@@ -14,6 +14,10 @@
  *
  */
 
+#include "AP_RCProtocol_config.h"
+
+#if AP_RCPROTOCOL_IBUS_ENABLED
+
 #include "AP_RCProtocol_IBUS.h"
 
 // constructor
@@ -89,6 +93,7 @@ void AP_RCProtocol_IBUS::_process_byte(uint32_t timestamp_us, uint8_t b)
     if (byte_input.ofs == sizeof(byte_input.buf)) {
         uint16_t values[IBUS_INPUT_CHANNELS];
         bool ibus_failsafe = false;
+        log_data(AP_RCProtocol::IBUS, timestamp_us, byte_input.buf, byte_input.ofs);
         if (ibus_decode(byte_input.buf, values, &ibus_failsafe)) {
             add_input(IBUS_INPUT_CHANNELS, values, ibus_failsafe);
         }
@@ -104,3 +109,5 @@ void AP_RCProtocol_IBUS::process_byte(uint8_t b, uint32_t baudrate)
     }
     _process_byte(AP_HAL::micros(), b);
 }
+
+#endif  // AP_RCPROTOCOL_IBUS_ENABLED

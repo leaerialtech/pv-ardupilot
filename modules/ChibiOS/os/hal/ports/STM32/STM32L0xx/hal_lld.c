@@ -55,7 +55,7 @@ static void hal_lld_backup_domain_init(void) {
   PWR->CR |= PWR_CR_DBP;
 
   /* Reset BKP domain if different clock source selected.*/
-  if ((RCC->CSR & STM32_RTCSEL_MASK) != STM32_RTCSEL){
+  if ((RCC->CSR & STM32_RTCSEL_MASK) != STM32_RTCSEL) {
     /* Backup domain reset.*/
     RCC->CSR |= RCC_CSR_RTCRST;
     RCC->CSR &= ~RCC_CSR_RTCRST;
@@ -65,7 +65,7 @@ static void hal_lld_backup_domain_init(void) {
 #if STM32_LSE_ENABLED
   RCC->CSR |= RCC_CSR_LSEON;
   while ((RCC->CSR & RCC_CSR_LSERDY) == 0)
-    ;                                     /* Waits until LSE is stable.   */
+    ;                                       /* Waits until LSE is stable.   */
 #endif
 
 #if STM32_RTCSEL != STM32_RTCSEL_NOCLOCK
@@ -85,60 +85,6 @@ static void hal_lld_backup_domain_init(void) {
 /* Driver interrupt handlers.                                                */
 /*===========================================================================*/
 
-#if defined(STM32_DMA_REQUIRED) || defined(__DOXYGEN__)
-#if defined(STM32_DMA1_CH23_HANDLER) || defined(__DOXYGEN__)
-/**
- * @brief   DMA1 streams 2 and 3 shared ISR.
- * @note    It is declared here because this device has a non-standard
- *          DMA shared IRQ handler.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(STM32_DMA1_CH23_HANDLER) {
-
-  OSAL_IRQ_PROLOGUE();
-
-  /* Check on channel 2.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM2);
-
-  /* Check on channel 3.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM3);
-
-  OSAL_IRQ_EPILOGUE();
-}
-#endif /* defined(STM32_DMA1_CH23_HANDLER) */
-
-#if defined(STM32_DMA1_CH4567_HANDLER) || defined(__DOXYGEN__)
-/**
- * @brief   DMA1 streams 4, 5, 6 and 7 shared ISR.
- *
- * @isr
- */
-OSAL_IRQ_HANDLER(STM32_DMA1_CH4567_HANDLER) {
-
-  OSAL_IRQ_PROLOGUE();
-
-  /* Check on channel 4.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM4);
-
-  /* Check on channel 5.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM5);
-
-#if STM32_DMA1_NUM_CHANNELS > 5
-  /* Check on channel 6.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM6);
-#endif
-
-#if STM32_DMA1_NUM_CHANNELS > 6
-  /* Check on channel 7.*/
-  dmaServeInterrupt(STM32_DMA1_STREAM7);
-#endif
-
-  OSAL_IRQ_EPILOGUE();
-}
-#endif /* defined(STM32_DMA1_CH4567_HANDLER) */
-#endif /* defined(STM32_DMA_REQUIRED) */
-
 /*===========================================================================*/
 /* Driver exported functions.                                                */
 /*===========================================================================*/
@@ -153,7 +99,7 @@ void hal_lld_init(void) {
   /* Reset of all peripherals except those on IOP.*/
   rccResetAHB(~RCC_AHBRSTR_MIFRST);
   rccResetAPB1(~RCC_APB1RSTR_PWRRST);
-  rccResetAPB2(~0);
+  rccResetAPB2(~RCC_APB2RSTR_SYSCFGRST);
 
   /* PWR clock enabled.*/
   rccEnablePWRInterface(true);
@@ -290,6 +236,9 @@ void stm32_clock_init(void) {
   /* Flash setup and final clock selection.*/
 #if defined(STM32_FLASHBITS)
   FLASH->ACR = STM32_FLASHBITS;
+  while ((FLASH->ACR & FLASH_ACR_LATENCY_Msk) !=
+         (STM32_FLASHBITS & FLASH_ACR_LATENCY_Msk)) {
+  }
 #endif
 
   /* Switching to the configured clock source if it is different from MSI.  */

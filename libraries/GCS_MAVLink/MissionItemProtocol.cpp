@@ -1,9 +1,10 @@
-//MODIFIED BY LEAERIALTECH
+#include "GCS_config.h"
+
+#if HAL_GCS_ENABLED
 
 #include "MissionItemProtocol.h"
 
 #include "GCS.h"
-#include "../ArduCopter/Copter.h"
 
 void MissionItemProtocol::init_send_requests(GCS_MAVLINK &_link,
                                              const mavlink_message_t &msg,
@@ -23,18 +24,14 @@ void MissionItemProtocol::init_send_requests(GCS_MAVLINK &_link,
 
     timelast_request_ms = AP_HAL::millis();
     link->send_message(next_item_ap_message_id());
+
+    mission_item_warning_sent = false;
+    mission_request_warning_sent = false;
 }
 
 void MissionItemProtocol::handle_mission_clear_all(const GCS_MAVLINK &_link,
                                                    const mavlink_message_t &msg)
 {
-    //PRECISIONVISION EDIT
-    //if we are in auto mode, get out of it now to avoid weird bug where clearing while running comes back fail
-    //but the GCS clears its end.  I think its a safe bet to assume if someone does a clear we need to get out of
-    //auto anyway. 
-    if(copter.control_mode == Mode::Number::AUTO){
-        copter.set_mode(Mode::Number::BRAKE, ModeReason::MISSION_END);
-    }
     bool success = true;
     success = success && !receiving;
     success = success && clear_all_items();
@@ -81,6 +78,7 @@ void MissionItemProtocol::handle_mission_count(
     if (packet.count > max_items()) {
         // FIXME: different items take up different storage space!
         send_mission_ack(_link, msg, MAV_MISSION_NO_SPACE);
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Only %u items are supported", (unsigned)max_items());
         return;
     }
 
@@ -120,6 +118,7 @@ void MissionItemProtocol::handle_mission_request_list(
 
     // reply with number of commands in the mission.  The GCS will
     // then request each command separately
+    CHECK_PAYLOAD_SIZE2_VOID(_link.get_chan(), MISSION_COUNT);
     mavlink_msg_mission_count_send(_link.get_chan(),
                                    msg.sysid,
                                    msg.compid,
@@ -127,7 +126,7 @@ void MissionItemProtocol::handle_mission_request_list(
                                    mission_type());
 }
 
-void MissionItemProtocol::handle_mission_request_int(const GCS_MAVLINK &_link,
+void MissionItemProtocol::handle_mission_request_int(GCS_MAVLINK &_link,
                                                      const mavlink_mission_request_int_t &packet,
                                                      const mavlink_message_t &msg)
 {
@@ -160,7 +159,8 @@ void MissionItemProtocol::handle_mission_request_int(const GCS_MAVLINK &_link,
     _link.send_message(MAVLINK_MSG_ID_MISSION_ITEM_INT, (const char*)&ret_packet);
 }
 
-void MissionItemProtocol::handle_mission_request(const GCS_MAVLINK &_link,
+#if AP_MAVLINK_MSG_MISSION_REQUEST_ENABLED
+void MissionItemProtocol::handle_mission_request(GCS_MAVLINK &_link,
                                                  const mavlink_mission_request_t &packet,
                                                  const mavlink_message_t &msg
 )
@@ -195,7 +195,23 @@ void MissionItemProtocol::handle_mission_request(const GCS_MAVLINK &_link,
         return;
     }
 
+    if (!mission_request_warning_sent) {
+        mission_request_warning_sent = true;
+        gcs().send_text(MAV_SEVERITY_WARNING, "got MISSION_REQUEST; use MISSION_REQUEST_INT!");
+    }
+
+    // buffer space is checked by send_message
     _link.send_message(MAVLINK_MSG_ID_MISSION_ITEM, (const char*)&ret_packet);
+}
+#endif  // AP_MAVLINK_MSG_MISSION_REQUEST_ENABLED
+
+void MissionItemProtocol::send_mission_item_warning()
+{
+    if (mission_item_warning_sent) {
+        return;
+    }
+    mission_item_warning_sent = true;
+    gcs().send_text(MAV_SEVERITY_WARNING, "got MISSION_ITEM; GCS should send MISSION_ITEM_INT");
 }
 
 void MissionItemProtocol::handle_mission_write_partial_list(GCS_MAVLINK &_link,
@@ -224,7 +240,7 @@ void MissionItemProtocol::handle_mission_write_partial_list(GCS_MAVLINK &_link,
 void MissionItemProtocol::handle_mission_item(const mavlink_message_t &msg, const mavlink_mission_item_int_t &cmd)
 {
     if (link == nullptr) {
-        AP::internalerror().error(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
+        INTERNAL_ERROR(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
         return;
     }
 
@@ -293,7 +309,7 @@ void MissionItemProtocol::send_mission_ack(const mavlink_message_t &msg,
                                            MAV_MISSION_RESULT result) const
 {
     if (link == nullptr) {
-        AP::internalerror().error(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
+        INTERNAL_ERROR(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
         return;
     }
     send_mission_ack(*link, msg, result);
@@ -302,6 +318,7 @@ void MissionItemProtocol::send_mission_ack(const GCS_MAVLINK &_link,
                                            const mavlink_message_t &msg,
                                            MAV_MISSION_RESULT result) const
 {
+    CHECK_PAYLOAD_SIZE2_VOID(_link.get_chan(), MISSION_ACK);
     mavlink_msg_mission_ack_send(_link.get_chan(),
                                  msg.sysid,
                                  msg.compid,
@@ -322,9 +339,10 @@ void MissionItemProtocol::queued_request_send()
         return;
     }
     if (link == nullptr) {
-        AP::internalerror().error(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
+        INTERNAL_ERROR(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
         return;
     }
+    CHECK_PAYLOAD_SIZE2_VOID(link->get_chan(), MISSION_REQUEST);
     mavlink_msg_mission_request_send(
         link->get_chan(),
         dest_sysid,
@@ -341,7 +359,7 @@ void MissionItemProtocol::update()
         return;
     }
     if (link == nullptr) {
-        AP::internalerror().error(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
+        INTERNAL_ERROR(AP_InternalError::error_t::gcs_bad_missionprotocol_link);
         return;
     }
     // stop waypoint receiving if timeout
@@ -349,19 +367,24 @@ void MissionItemProtocol::update()
     if (tnow - timelast_receive_ms > upload_timeout_ms) {
         receiving = false;
         timeout();
-        mavlink_msg_mission_ack_send(link->get_chan(),
-                                     dest_sysid,
-                                     dest_compid,
-                                     MAV_MISSION_OPERATION_CANCELLED,
-                                     mission_type());
+        const mavlink_channel_t chan = link->get_chan();
+        if (HAVE_PAYLOAD_SPACE(chan, MISSION_ACK)) {
+            mavlink_msg_mission_ack_send(chan,
+                                         dest_sysid,
+                                         dest_compid,
+                                         MAV_MISSION_OPERATION_CANCELLED,
+                                         mission_type());
+        }
         link = nullptr;
         free_upload_resources();
         return;
     }
     // resend request if we haven't gotten one:
-    const uint32_t wp_recv_timeout_ms = 1000U + (link->get_stream_slowdown_ms()*20);
+    const uint32_t wp_recv_timeout_ms = 1000U + link->get_stream_slowdown_ms();
     if (tnow - timelast_request_ms > wp_recv_timeout_ms) {
         timelast_request_ms = tnow;
         link->send_message(next_item_ap_message_id());
     }
 }
+
+#endif  // HAL_GCS_ENABLED

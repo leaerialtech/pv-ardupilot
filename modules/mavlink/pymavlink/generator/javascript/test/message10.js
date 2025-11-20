@@ -1,26 +1,29 @@
-var {mavlink10, MAVLink10Processor} = require('../implementations/mavlink_common_v1.0/mavlink.js'),
-should = require('should');
+var should = require('should');
 
 describe('MAVLink 1.0 message registry', function() {
+
+    beforeEach(function() {
+        var {mavlink10, MAVLink10Processor} = require('../implementations/mavlink_common_v1.0/mavlink.js')
+    });
 
     it('defines constructors for every message', function() {
         mavlink10.messages['gps_raw_int'].should.be.a.function;
     });
 
-    it('assigns message properties, format with int64 (q), gps_raw_int', function() {
+    it('assigns message properties, _format with int64 (q), gps_raw_int', function() {
         var m = new mavlink10.messages['gps_raw_int']();
-        m.format.should.equal("<QiiiHHHHBB");
+        m._format.should.equal("<QiiiHHHHBB");
         m.order_map.should.eql([0, 8, 1, 2, 3, 4, 5, 6, 7, 9]); // should.eql = shallow comparison
         m.crc_extra.should.equal(24);
-        m.id.should.equal(mavlink10.MAVLINK_MSG_ID_GPS_RAW_INT);
+        m._id.should.equal(mavlink10.MAVLINK_MSG_ID_GPS_RAW_INT);
     });
 
     it('assigns message properties, heartbeat', function() {
         var m = new mavlink10.messages['heartbeat']();
-        m.format.should.equal("<IBBBBB");
+        m._format.should.equal("<IBBBBB");
         m.order_map.should.eql([1, 2, 3, 0, 4, 5]); // should.eql = shallow comparison
         m.crc_extra.should.equal(50);
-        m.id.should.equal(mavlink10.MAVLINK_MSG_ID_HEARTBEAT);
+        m._id.should.equal(mavlink10.MAVLINK_MSG_ID_HEARTBEAT);
     });
 
 });
@@ -90,13 +93,12 @@ describe('Complete MAVLink 1.0 packet', function() {
             , base_mode=45
             , custom_mode=68
             , system_status=13
-            , mavlink_version=1
         );
         
         this.mav.seq = 7;
 
         // Create a buffer that matches what the Python version of MAVLink creates
-        var reference = new Buffer.from([0xfe, 0x09, 0x07, 0x2a, 0x96, 0x00, 0x44, 0x00, 0x00, 0x00, 0x05, 0x03, 0x2d, 0x0d, 0x01, 0xac, 0x9d]);
+        var reference = new Buffer.from([0xfe, 0x09, 0x07, 0x2a, 0x96, 0x00, 0x44, 0x00, 0x00, 0x00, 0x05, 0x03, 0x2d, 0x0d, 0x03, 0x1c, 0xae]);
         new Buffer.from(heartbeat.pack(this.mav)).should.eql(reference);
 
     });
@@ -114,9 +116,9 @@ describe('Complete MAVLink 1.0 packet', function() {
         var msg = m.parseBuffer(reference);
 
         // check header
-        msg[0].header.seq.should.eql(5);
-        msg[0].header.srcSystem.should.eql(42);
-        msg[0].header.srcComponent.should.eql(150);
+        msg[0]._header.seq.should.eql(5);
+        msg[0]._header.srcSystem.should.eql(42);
+        msg[0]._header.srcComponent.should.eql(150);
 
         // check payload
         msg[0].time_usec.should.eql([0x9e3d1801, 0xffd8359, true]);
@@ -150,6 +152,7 @@ describe('MAVLink 1.0 header', function() {
 describe('MAVLink 1.0 message', function() {
 
     beforeEach(function() {
+        var {mavlink10, MAVLink10Processor} = require('../implementations/mavlink_common_v1.0/mavlink.js')
         // This is a heartbeat packet from a GCS to the APM.
         this.heartbeat = new mavlink10.messages.heartbeat(
             mavlink10.MAV_TYPE_GCS, // 6
@@ -157,7 +160,6 @@ describe('MAVLink 1.0 message', function() {
             0, // base mode, mavlink10.MAV_MODE_FLAG_***
             0, // custom mode
             mavlink10.MAV_STATE_STANDBY, // system status
-            3 // MAVLink version
         );
 
         this.mav = new MAVLink10Processor();
@@ -195,6 +197,7 @@ describe('MAVLink 1.0 message', function() {
     describe('decode 1.0 function', function() {
 
         beforeEach(function() {
+            var {mavlink10, MAVLink10Processor} = require('../implementations/mavlink_common_v1.0/mavlink.js')
             this.m = new MAVLink10Processor();
         });
 

@@ -2,6 +2,9 @@
 # encoding: utf-8
 
 # Replaces the default formatter by one which understands GCC output and colorizes it.
+#
+# This is mostly obsolete as gcc/g++ provide colored outputs by default:
+#    CFLAGS="-fdiagnostics-color=always" CXXFLAGS="-fdiagnostics-color=always" waf configure clean build
 
 __author__ = __maintainer__ = "Jérôme Carretero <cJ-waf@zougloub.eu>"
 __copyright__ = "Jérôme Carretero, 2012"
@@ -19,7 +22,7 @@ class ColorGCCFormatter(Logs.formatter):
 			func = frame.f_code.co_name
 			if func == 'exec_command':
 				cmd = frame.f_locals.get('cmd')
-				if isinstance(cmd, list) and ('gcc' in cmd[0] or 'g++' in cmd[0]):
+				if isinstance(cmd, list) and (len(cmd) > 0) and ('gcc' in cmd[0] or 'g++' in cmd[0]):
 					lines = []
 					for line in rec.msg.splitlines():
 						if 'warning: ' in line:
@@ -36,4 +39,3 @@ class ColorGCCFormatter(Logs.formatter):
 
 def options(opt):
 	Logs.log.handlers[0].setFormatter(ColorGCCFormatter(Logs.colors))
-

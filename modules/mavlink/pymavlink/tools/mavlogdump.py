@@ -16,6 +16,12 @@ import struct
 import sys
 import time
 
+# Detect python version
+if sys.version_info[0] < 3:
+    runningPython3 = False
+else:
+    runningPython3 = True
+
 try:
     from pymavlink.mavextra import *
 except:
@@ -32,10 +38,12 @@ parser.add_argument("--condition", default=None, help="select packets by conditi
 parser.add_argument("-q", "--quiet", action='store_true', help="don't display packets")
 parser.add_argument("-o", "--output", default=None, help="output matching packets to give file")
 parser.add_argument("-p", "--parms", action='store_true', help="preserve parameters in output with -o")
-parser.add_argument("--format", default=None, help="Change the output format between 'standard', 'json', and 'csv'. For the CSV output, you must supply types that you want.")
+parser.add_argument("--format", default=None, help="Change the output format between 'standard', 'json', 'csv' and 'mat'. For the CSV output, you must supply types that you want. For MAT output, specify output file with --mat_file")
 parser.add_argument("--csv_sep", dest="csv_sep", default=",", help="Select the delimiter between columns for the output CSV file. Use 'tab' to specify tabs. Only applies when --format=csv")
 parser.add_argument("--types", default=None, help="types of messages (comma separated with wildcard)")
 parser.add_argument("--nottypes", default=None, help="types of messages not to include (comma separated with wildcard)")
+parser.add_argument("--mat_file", dest="mat_file", help="Output file path for MATLAB file output. Only applies when --format=mat")
+parser.add_argument("-c", "--compress", action='store_true', help="Compress .mat file data")
 parser.add_argument("--dialect", default="ardupilotmega", help="MAVLink dialect")
 parser.add_argument("--zero-time-base", action='store_true', help="use Z time base for DF logs")
 parser.add_argument("--no-bad-data", action='store_true', help="Don't output corrupted messages")
@@ -48,8 +56,10 @@ parser.add_argument("--link", type=int, default=None, help="filter by comms link
 parser.add_argument("--verbose", action='store_true', help="Dump messages in a much more verbose (but non-parseable) format")
 parser.add_argument("--mav10", action='store_true', help="parse as MAVLink1")
 parser.add_argument("--reduce", type=int, default=0, help="reduce streaming messages")
+parser.add_argument("--reduce-rate", type=float, default=0, help="reduce messages to maximum rate in Hz")
 parser.add_argument("log", metavar="LOG")
 parser.add_argument("--profile", action='store_true', help="run the Yappi python profiler")
+parser.add_argument("--meta", action='store_true', help="output meta-data msgs even if not matching condition")
 
 args = parser.parse_args()
 
@@ -64,6 +74,15 @@ from pymavlink import mavutil
 if args.profile:
     import yappi    # We do the import here so that we won't barf if run normally and yappi not available
     yappi.start()
+
+if args.format == 'mat':
+    # Check that the mat_file argument has been specified
+    if args.mat_file is None:
+        print("mat_file argument must be specified when mat format is selected")
+        sys.exit(1)
+    # Load these modules here, as they're only needed for MAT file creation
+    import scipy.io
+    import numpy as np
 
 filename = args.log
 mlog = mavutil.mavlink_connection(filename, planner_format=args.planner,
@@ -115,8 +134,38 @@ def reduce_msg(mtype, reduction_ratio):
         return False
     return True
 
+last_msg_rate_t = {}
+
+def reduce_rate_msg(m, reduction_rate):
+    '''return True if this msg should be discarded by reduction'''
+    global last_msg_rate_t
+    mtype = m.get_type()
+    if mtype in ['PARM','MSG','FMT','FMTU','MULT','MODE','EVT','UNIT', 'VER']:
+        return False
+    t = getattr(m,'_timestamp',None)
+    if t is None:
+        return False
+    if not mtype in last_msg_rate_t:
+        last_msg_rate_t[mtype] = t
+    dt = t - last_msg_rate_t[mtype]
+
+    if dt < 0 or dt >= 1.0/reduction_rate:
+        last_msg_rate_t[mtype] = t
+        return False
+    return True
+
 if args.csv_sep == "tab":
-    args.csv_sep = "\t"
+    args.csv_sep = ","
+
+# swiped from DFReader.py
+def to_string(s):
+    '''desperate attempt to convert a string regardless of what garbage we get'''
+    if isinstance(s, str):
+        return s
+    if sys.version_info[0] == 2:
+        # In python2 we want to return unicode for passed in unicode
+        return s
+    return s.decode(errors="backslashreplace")
 
 def match_type(mtype, patterns):
     '''return True if mtype matches pattern'''
@@ -134,26 +183,28 @@ if istlog and args.format == 'csv': # we know our fields from the get-go
         for type in types:
             try:
                 typeClass = "MAVLink_{0}_message".format(type.lower())
-                fields += [type + '.' + x for x in inspect.getargspec(getattr(mavutil.mavlink, typeClass).__init__).args[1:]]
+                if runningPython3:
+                    fields += [type + '.' + x for x in inspect.getfullargspec(getattr(mavutil.mavlink, typeClass).__init__).args[1:]]
+                else:
+                    fields += [type + '.' + x for x in inspect.getargspec(getattr(mavutil.mavlink, typeClass).__init__).args[1:]]
                 offsets[type] = currentOffset
                 currentOffset += len(fields)
             except IndexError:
-                quit()
+                sys.exit(1)
+            except AttributeError:
+                print("Message type '%s' not found" % (type))
+                sys.exit(1)
     except TypeError:
         print("You must specify a list of message types if outputting CSV format via the --types argument.")
-        exit()
+        sys.exit(1)
 
     # The first line output are names for all columns
-    csv_out = ["" for x in fields]
     print(args.csv_sep.join(fields))
 
-if isbin and args.format == 'csv': # need to accumulate columns from message
+if (isbin or islog) and args.format == 'csv': # need to accumulate columns from message
     if types is None or len(types) != 1:
         print("Need exactly one type when dumping CSV from bin file")
-        quit()
-
-# Track the last timestamp value. Used for compressing data for the CSV output format.
-last_timestamp = None
+        sys.exit(1)
 
 # Track types found
 available_types = set()
@@ -169,42 +220,47 @@ if types is not None and hasattr(mlog, 'name_to_id'):
                 match_types = []
             match_types.append(k)
 
-if isbin and args.format == 'csv':
+if (isbin or islog) and args.format == 'csv':
+    # Make sure the specified type was found
+    if match_types is None:
+        print("Specified type '%s' not found in log file" % (types[0]))
+        sys.exit(1)
     # we need FMT messages for column headings
     match_types.append("FMT")
 
 # Keep track of data from the current timestep. If the following timestep has the same data, it's stored in here as well. Output should therefore have entirely unique timesteps.
+MAT = {}    # Dictionary to hold output data for 'mat' format option
 while True:
     m = mlog.recv_match(blocking=args.follow, type=match_types)
     if m is None:
-        # write the final csv line before exiting
-        if args.format == 'csv' and csv_out:
-          csv_out[0] = "{:.8f}".format(last_timestamp)
-          print(args.csv_sep.join(csv_out))
         break
-    available_types.add(m.get_type())
-    if isbin and m.get_type() == "FMT" and args.format == 'csv':
+    m_type = m.get_type()
+    available_types.add(m_type)
+    if (isbin or islog) and m_type == "FMT" and args.format == 'csv':
         if m.Name == types[0]:
             fields += m.Columns.split(',')
-            csv_out = ["" for x in fields]
             print(args.csv_sep.join(fields))
 
-    if args.reduce and reduce_msg(m.get_type(), args.reduce):
+    if args.reduce and reduce_msg(m_type, args.reduce):
+        continue
+
+    if args.reduce_rate > 0 and reduce_rate_msg(m, args.reduce_rate):
         continue
 
     if output is not None:
-        if (isbin or islog) and m.get_type() == "FMT":
+        if (isbin or islog) and m_type == "FMT":
             output.write(m.get_msgbuf())
             continue
-        if (isbin or islog) and (m.get_type() == "PARM" and args.parms):
+        if (isbin or islog) and (m_type == "PARM" and args.parms):
             output.write(m.get_msgbuf())
             continue
-        if m.get_type() == 'PARAM_VALUE' and args.parms:
+        if m_type == 'PARAM_VALUE' and args.parms:
             timestamp = getattr(m, '_timestamp', None)
             output.write(struct.pack('>Q', int(timestamp*1.0e6)) + m.get_msgbuf())
             continue
 
-    if not mavutil.evaluate_condition(args.condition, mlog.messages):
+    if not mavutil.evaluate_condition(args.condition, mlog.messages) and (
+            not (m_type in ['FMT', 'FMTU', 'MULT', 'PARM', 'MODE', 'UNIT', 'VER'] and args.meta)):
         continue
     if args.source_system is not None and args.source_system != m.get_srcSystem():
         continue
@@ -213,15 +269,15 @@ while True:
     if args.link is not None and args.link != m._link:
         continue
 
-    if types is not None and m.get_type() != 'BAD_DATA' and not match_type(m.get_type(), types):
+    if types is not None and m_type != 'BAD_DATA' and not match_type(m_type, types):
         continue
 
-    if nottypes is not None and match_type(m.get_type(), nottypes):
+    if nottypes is not None and match_type(m_type, nottypes):
         continue
 
     # Ignore BAD_DATA messages is the user requested or if they're because of a bad prefix. The
     # latter case is normally because of a mismatched MAVLink version.
-    if m.get_type() == 'BAD_DATA' and (args.no_bad_data is True or m.reason == "Bad prefix"):
+    if m_type == 'BAD_DATA' and (args.no_bad_data is True or m.reason == "Bad prefix"):
         continue
 
     # Grab the timestamp.
@@ -234,7 +290,7 @@ while True:
         try:
             output.write(m.get_msgbuf())
         except Exception as ex:
-            print("Failed to write msg %s: %s" % (m.get_type(), str(ex)))
+            print("Failed to write msg %s: %s" % (m_type, str(ex)))
 
     # If quiet is specified, don't display output to the terminal.
     if args.quiet:
@@ -254,7 +310,7 @@ while True:
 
         # Prepare the message as a single object with 'meta' and 'data' keys holding
         # the message's metadata and actual data respectively.
-        meta = {"type": m.get_type(), "timestamp": timestamp}
+        meta = {"type": m_type, "timestamp": timestamp}
         if args.show_source:
             meta["srcSystem"] = m.get_srcSystem()
             meta["srcComponent"] = m.get_srcComponent()
@@ -263,40 +319,56 @@ while True:
         for key in data.keys():
             if type(data[key]) == array.array:
                 data[key] = list(data[key])
+        # convert any byte-strings into utf-8 strings.  Don't die trying.
+        for key in data.keys():
+            if type(data[key]) == bytes:
+                data[key] = to_string(data[key])
         outMsg = {"meta": meta, "data": data}
 
         # Now print out this object with stringified properly.
         print(json.dumps(outMsg))
+
     # CSV format outputs columnar data with a user-specified delimiter
     elif args.format == 'csv':
         data = m.to_dict()
-        type = m.get_type()
-
-        # If this message has a duplicate timestamp, copy its data into the existing data list. Also
-        # do this if it's the first message encountered.
-        if timestamp == last_timestamp or last_timestamp is None:
-            if isbin:
-                newData = [str(data[y]) if y != "timestamp" else "" for y in fields]
-            else:
-                newData = [str(data[y.split('.')[-1]]) if y.split('.')[0] == type and y.split('.')[-1] in data else "" for y in fields]
-
-            for i, val in enumerate(newData):
-                if val:
-                    csv_out[i] = val
-
-        # Otherwise if this is a new timestamp, print out the old output data, and store the current message for later output.
+        if isbin or islog:
+            csv_out = [str(data[y]) if y != "timestamp" else "" for y in fields]
         else:
-            csv_out[0] = "{:.8f}".format(last_timestamp)
-            print(args.csv_sep.join(csv_out))
-            if isbin:
-                csv_out = [str(data[y]) if y != "timestamp" else "" for y in fields]
-            else:
-                csv_out = [str(data[y.split('.')[-1]]) if y.split('.')[0] == type and y.split('.')[-1] in data else "" for y in fields]
+            csv_out = [str(data[y.split('.')[-1]]) if y.split('.')[0] == m_type and y.split('.')[-1] in data else "" for y in fields]
+        csv_out[0] = "{:.8f}".format(timestamp)
+        print(args.csv_sep.join(csv_out))
+
+    # MAT format outputs data to a .mat file specified through the
+    # --mat_file option
+    elif args.format == 'mat':
+        # If this packet contains data (i.e. is not a FMT
+        # packet), append the data in this packet to the
+        # corresponding list
+        if m_type != 'FMT':
+
+            # If this packet type has not yet been
+            # seen, add a new entry to the big dict
+            if m_type not in MAT:
+                MAT[m_type] = {}
+
+            md = m.to_dict()
+            del md['mavpackettype']
+            cols = md.keys()
+            for col in cols:
+                # If this column hasn't had data entered,
+                # make a new key and list
+                if col in MAT[m_type]:
+                    MAT[m_type][col].append(md[col])
+                else:
+                    MAT[m_type][col] = [md[col]]
     elif args.show_types:
         # do nothing
         pass
     elif args.verbose and istlog:
         mavutil.dump_message_verbose(sys.stdout, m)
+        print("")
+    elif args.verbose and hasattr(m,"dump_verbose"):
+        m.dump_verbose(sys.stdout)
         print("")
     else:
         # Otherwise we output in a standard Python dict-style format
@@ -309,8 +381,9 @@ while True:
             s += " seq=%u" % m.get_seq()
         print(s)
 
-    # Update our last timestamp value.
-    last_timestamp = timestamp
+# Export the .mat file
+if args.format == 'mat':
+    scipy.io.savemat(args.mat_file, MAT, do_compression=args.compress)
 
 if args.show_types:
     for msgType in available_types:

@@ -16,11 +16,15 @@
    http://support.lightware.co.za/sf45/#/commands
  */
 
+#include "AP_Proximity_config.h"
+
+#if AP_PROXIMITY_LIGHTWARE_SF45B_ENABLED
+
+#include "AP_Proximity_LightWareSF45B.h"
+
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/utility/sparse-endian.h>
-#include "AP_Proximity_LightWareSF45B.h"
-#include "AP_Proximity_Backend.h"
 
 extern const AP_HAL::HAL& hal;
 
@@ -70,9 +74,6 @@ void AP_Proximity_LightWareSF45B::initialise()
 
     // request stream rate and contents
     request_stream_start();
-
-    // initialise boundary
-    init_boundary();
 }
 
 // request start of streaming of distances
@@ -108,8 +109,6 @@ void AP_Proximity_LightWareSF45B::process_replies()
     }
 }
 
-
-
 // process the latest message held in the _msg structure
 void AP_Proximity_LightWareSF45B::process_message()
 {
@@ -143,36 +142,21 @@ void AP_Proximity_LightWareSF45B::process_message()
         const float distance_m = _distance_filt.apply((int16_t)UINT16_VALUE(_msg.payload[1], _msg.payload[0])) * 0.01f;
         const float angle_deg = correct_angle_for_orientation((int16_t)UINT16_VALUE(_msg.payload[3], _msg.payload[2]) * 0.01f);
 
-        // if distance is from a new sector then update distance, angle and boundary for previous sector
-        const uint8_t sector = convert_angle_to_sector(angle_deg);
-     
-        if (sector != _sector) {
-            if (_sector != UINT8_MAX) {
-                _angle[_sector] = _sector_angle;
-                _distance[_sector] = _sector_distance;
-                _distance_valid[_sector] = _sector_distance_valid;
-
-                //smooth this out with our filter 
-
-                const uint32_t now_ms = AP_HAL::millis();
-                const uint32_t dt = now_ms - _last_update_ms[_sector];
-                _last_update_ms[_sector] = now_ms;
-                if (dt < PROXIMITY_FILT_RESET_TIME) {
-                        _filtered_distance[_sector].set_cutoff_frequency(frontend.get_filter_freq());
-                        _filtered_distance[_sector].apply(_sector_distance, dt* 0.001f);
-                } else {
-                    // reset filter since last distance was passed a long time back
-                    _filtered_distance[_sector].reset(_sector_distance);
-                }
-               
-
-                update_boundary_for_sector(_sector, false);
+        // if distance is from a new face then update distance, angle and boundary for previous face
+        // get face from 3D boundary based on yaw angle to the object
+        const AP_Proximity_Boundary_3D::Face face = frontend.boundary.get_face(angle_deg);
+        if (face != _face) {
+            if (_face_distance_valid) {
+                frontend.boundary.set_face_attributes(_face, _face_yaw_deg, _face_distance, state.instance);
+            } else {
+                // mark previous face invalid
+                frontend.boundary.reset_face(_face, state.instance);
             }
-            // init for new sector
-            _sector = sector;
-            _sector_angle = 0;
-            _sector_distance = INT16_MAX;
-            _sector_distance_valid = false;
+            // record updated face
+            _face = face;
+            _face_yaw_deg = 0;
+            _face_distance = INT16_MAX;
+            _face_distance_valid = false;
         }
 
         // if distance is from a new minisector then update obstacle database using angle and distance from previous minisector
@@ -189,12 +173,12 @@ void AP_Proximity_LightWareSF45B::process_message()
         }
 
         // check reading is valid
-        if (!ignore_reading(angle_deg) && (distance_m >= distance_min()) && (distance_m <= distance_max())) {
-            // update shortest distance for this sector
-            if (distance_m < _sector_distance) {
-                _sector_angle = angle_deg;
-                _sector_distance = distance_m;
-                _sector_distance_valid = true;
+        if (!ignore_reading(angle_deg, distance_m) && (distance_m >= distance_min()) && (distance_m <= distance_max())) {
+            // update shortest distance for this face
+            if (!_face_distance_valid || (distance_m < _face_distance)) {
+                _face_yaw_deg = angle_deg;
+                _face_distance = distance_m;
+                _face_distance_valid = true;
             }
 
             // update shortest distance for this mini sector
@@ -218,3 +202,5 @@ uint8_t AP_Proximity_LightWareSF45B::convert_angle_to_minisector(float angle_deg
 {
     return wrap_360(angle_deg + (PROXIMITY_SF45B_COMBINE_READINGS_DEG * 0.5f)) / PROXIMITY_SF45B_COMBINE_READINGS_DEG;
 }
+
+#endif // AP_PROXIMITY_LIGHTWARE_SF45B_ENABLED

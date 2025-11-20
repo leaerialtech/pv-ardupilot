@@ -279,6 +279,9 @@
 #error "I2C4 DMA streams not defined"
 #endif
 
+/* Devices without DMAMUX require an additional check.*/
+#if !STM32_DMA_SUPPORTS_DMAMUX
+
 /* Check on the validity of the assigned DMA channels.*/
 #if STM32_I2C_USE_I2C1 &&                                                   \
     !STM32_DMA_IS_VALID_ID(STM32_I2C_I2C1_RX_DMA_STREAM,                    \
@@ -328,6 +331,8 @@
 #error "invalid DMA stream associated to I2C4 TX"
 #endif
 
+#endif /* !STM32_DMA_SUPPORTS_DMAMUX */
+
 #endif /* STM32_ADVANCED_DMA */
 
 #if !defined(STM32_DMA_REQUIRED)
@@ -350,9 +355,9 @@ typedef uint16_t i2caddr_t;
 typedef uint32_t i2cflags_t;
 
 /**
- * @brief   Type of I2C driver configuration structure.
+ * @brief   I2C driver configuration structure.
  */
-typedef struct {
+struct hal_i2c_config {
   /**
    * @brief   TIMINGR register initialization.
    * @note    Refer to the STM32 reference manual, the values are affected
@@ -369,17 +374,22 @@ typedef struct {
    * @note    Only the ADD10 bit can eventually be specified here.
    */
   uint32_t        cr2;
-} I2CConfig;
+};
+
+/**
+ * @brief   Type of a structure representing an I2C configuration.
+ */
+typedef struct hal_i2c_config I2CConfig;
 
 /**
  * @brief   Type of a structure representing an I2C driver.
  */
-typedef struct I2CDriver I2CDriver;
+typedef struct hal_i2c_driver I2CDriver;
 
 /**
  * @brief   Structure representing an I2C driver.
  */
-struct I2CDriver {
+struct hal_i2c_driver {
   /**
    * @brief   Driver state.
    */

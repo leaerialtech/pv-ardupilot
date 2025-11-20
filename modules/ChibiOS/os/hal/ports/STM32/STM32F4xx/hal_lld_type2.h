@@ -317,7 +317,7 @@
  * @name    RCC_DCKCFGR2 register bits definitions
  * @{
  */
-#define STM32_I2CFMP1SEL_MASK   (3 << 22)   /**< I2CFMP1SEL mask.              */
+#define STM32_I2CFMP1SEL_MASK   (3 << 22)   /**< I2CFMP1SEL mask.           */
 #define STM32_I2CFMP1SEL_PCLK1  (0 << 22)   /**< I2C1 source is APB/PCLK1.  */
 #define STM32_I2CFMP1SEL_SYSCLK (1 << 22)   /**< I2C1 source is SYSCLK.     */
 #define STM32_I2CFMP1SEL_HSI    (2 << 22)   /**< I2C1 source is HSI.        */
@@ -325,6 +325,7 @@
 #define STM32_CK48MSEL_MASK     (1 << 27)   /**< CK48MSEL mask.             */
 #define STM32_CK48MSEL_PLL      (0 << 27)   /**< PLL48CLK source is PLL.    */
 #define STM32_CK48MSEL_PLLI2S   (1 << 27)   /**< PLL48CLK source is PLLI2S. */
+#define STM32_CK48MSEL_PLLALT   (1 << 27)   /**< Alias.                     */
 
 #define STM32_SDIOSEL_MASK      (1 << 28)   /**< SDIOSEL mask.              */
 #define STM32_SDIOSEL_PLL48CLK  (0 << 28)   /**< SDIO source is PLL48CLK.   */
@@ -508,7 +509,7 @@
 /**
  * @brief   PLLI2SM divider value.
  * @note    The allowed values are 2..63.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SM_VALUE) || defined(__DOXYGEN__)
@@ -519,7 +520,7 @@
  * @brief   PLLI2SN multiplier value.
  * @note    The allowed values are 192..432, except for
  *          STM32F446 where values are 50...432.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SN_VALUE) || defined(__DOXYGEN__)
@@ -529,7 +530,7 @@
 /**
  * @brief   PLLI2SR divider value.
  * @note    The allowed values are 2..7.
- * @note    The default value is calculated for a 96MHz I2S clock 
+ * @note    The default value is calculated for a 96MHz I2S clock
  *          output from an external 8MHz HSE clock.
  */
 #if !defined(STM32_PLLI2SR_VALUE) || defined(__DOXYGEN__)
@@ -562,7 +563,6 @@
 
 /**
  * @brief   SAI1SEL value (SAI1 clock source).
- * @todo    Add check.
  */
 #if !defined(STM32_SAI1SEL) || defined(__DOXYGEN__)
 #define STM32_SAI1SEL               STM32_SAI1SEL_OFF
@@ -570,7 +570,6 @@
 
 /**
  * @brief   SAI2SEL value (SAI2 clock source).
- * @todo    Add check.
  */
 #if !defined(STM32_SAI2SEL) || defined(__DOXYGEN__)
 #define STM32_SAI2SEL               STM32_SAI2SEL_OFF
@@ -653,7 +652,8 @@
 #endif
 
 /**
- * @name    Maximum frequency thresholds and wait states for flash access.
+ * @name    Maximum frequency thresholds, wait states and
+ *          parallelism for flash access.
  * @{
  */
 #if defined(STM32F413xx)
@@ -667,6 +667,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           2
 #elif (STM32_VDD >= 240) && (STM32_VDD < 270)
 #define STM32_0WS_THRESHOLD         20000000
 #define STM32_1WS_THRESHOLD         40000000
@@ -677,6 +678,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 210) && (STM32_VDD < 240)
 #define STM32_0WS_THRESHOLD         18000000
 #define STM32_1WS_THRESHOLD         36000000
@@ -687,6 +689,7 @@
 #define STM32_6WS_THRESHOLD         0
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           1
 #elif (STM32_VDD >= 170) && (STM32_VDD < 210)
 #define STM32_0WS_THRESHOLD         16000000
 #define STM32_1WS_THRESHOLD         32000000
@@ -697,9 +700,11 @@
 #define STM32_6WS_THRESHOLD         100000000
 #define STM32_7WS_THRESHOLD         0
 #define STM32_8WS_THRESHOLD         0
+#define STM32_FLASH_PSIZE           0
 #else
 #error "invalid VDD voltage specified"
 #endif
+#define FLASH_SR_OPERR              FLASH_SR_SOP
 #endif /* defined(STM32F413xx) */
 /** @} */
 
@@ -802,7 +807,7 @@
 #if STM32_LSI_ENABLED
 #else /* !STM32_LSI_ENABLED */
 
-#if STM32_RTCSEL == STM32_RTCSEL_LSI
+#if HAL_USE_RTC && (STM32_RTCSEL == STM32_RTCSEL_LSI)
 #error "LSI not enabled, required by STM32_RTCSEL"
 #endif
 
@@ -1168,6 +1173,12 @@
  * @brief   PLLI2S R output clock frequency.
  */
 #define STM32_PLLI2S_R_CLKOUT       (STM32_PLLI2SVCO / STM32_PLLI2SR_VALUE)
+
+/**
+ * @brief   PLLI2SP enable bit.
+ * @note    Always 0, there is no PLLI2SP.
+ */
+#define STM32_PLLI2SP               0
 
 /**
  * @brief   PLLSAI activation flag.

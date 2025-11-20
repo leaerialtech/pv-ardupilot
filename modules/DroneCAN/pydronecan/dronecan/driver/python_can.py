@@ -39,7 +39,7 @@ else:
                 if channel is None:
                     self._bus = can.interface.Bus() # get bus from environment's config file
                 else:
-                    if not hasattr(_extras,'bustype'):
+                    if not 'bustype' in _extras:
                         _extras['bustype'] = 'socketcan'
                     self._bus = can.interface.Bus(channel=channel, bustype=_extras['bustype'], bitrate=_extras['bitrate'])
             except Exception as ex:
@@ -84,12 +84,20 @@ else:
                 try:
                     while not self._writer_thread_should_stop:
                         try:
-                            msg = can.Message(
-                                arbitration_id=frame.id,
-                                extended_id=frame.extended,
-                                dlc=len(frame.data),
-                                data=list(frame.data),
-                            )
+                            if can.__version__ >= '4.0.0':
+                                msg = can.Message(
+                                    arbitration_id=frame.id,
+                                    is_extended_id=frame.extended,
+                                    dlc=len(frame.data),
+                                    data=list(frame.data),
+                                )
+                            else:
+                                msg = can.Message(
+                                    arbitration_id=frame.id,
+                                    extended_id=frame.extended,
+                                    dlc=len(frame.data),
+                                    data=list(frame.data),
+                                )
                             self._bus.send(msg)
                             self._bus.flush_tx_buffer()
 
@@ -152,11 +160,11 @@ else:
             except Exception as ex:
                 logger.error("Receive exception", exc_info=True)
 
-        def send(self, message_id, message, extended=False, canfd=False):
-            if canfd:
+        def send_frame(self, frame):
+            if frame.canfd:
                 raise DriverError('CANFD not supported by PythonCAN')
             self._check_write_feedback()
             try:
-                self._write_queue.put_nowait(CANFrame(message_id, message, extended))
+                self._write_queue.put_nowait(frame)
             except queue.Full:
                 raise TxQueueFullError()

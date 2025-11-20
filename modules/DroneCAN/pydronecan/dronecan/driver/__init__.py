@@ -11,6 +11,8 @@ from __future__ import division, absolute_import, print_function, unicode_litera
 import sys
 from .python_can import PythonCAN
 from .slcan import SLCAN
+from .mcast import mcast
+from .file import file
 try:
     from .mavcan import MAVCAN
     have_mavcan = True
@@ -41,12 +43,23 @@ def make_driver(device_name, **kwargs):
     windows_com_port = device_name.replace('\\', '').replace('.', '').lower().startswith('com')
     unix_tty = device_name.startswith('/dev/')
 
+    if device_name.startswith('PCAN'):
+        kwargs['bustype'] = 'pcan'
+
     if device_name.startswith("mavcan:"):
         if not have_mavcan:
             raise DriverError('MAVCAN is not available, ensure pymavlink is installed')
         return MAVCAN(device_name[7:], **kwargs)
     elif device_name.startswith("slcan:"):
         return SLCAN(device_name[6:], **kwargs)
+    elif device_name.startswith("mcast:"):
+        return mcast(device_name[6:], **kwargs)
+    elif device_name.startswith("filein:"):
+        kwargs['readonly'] = True
+        return file(device_name[7:], **kwargs)
+    elif device_name.startswith("fileout:"):
+        kwargs['readonly'] = False
+        return file(device_name[8:], **kwargs)
     elif windows_com_port or unix_tty:
         if is_mavlink_port(device_name, **kwargs):
             return MAVCAN(device_name, **kwargs)

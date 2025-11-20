@@ -14,10 +14,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#include "GCS_config.h"
+
+#if HAL_GCS_ENABLED
+
 #include <AP_HAL/AP_HAL.h>
 
 #include "GCS.h"
 #include <AP_Logger/AP_Logger.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -37,20 +43,25 @@ GCS_MAVLINK::queued_param_send()
     // send parameter async replies
     uint8_t async_replies_sent_count = send_parameter_async_replies();
 
+    // now send the streaming parameters (from PARAM_REQUEST_LIST)
+    if (_queued_parameter == nullptr) {
+        // .... or not....
+        return;
+    }
+
     const uint32_t tnow = AP_HAL::millis();
     const uint32_t tstart = AP_HAL::micros();
 
-    // use at most 30% of bandwidth on parameters. The constant 26 is
-    // 1/(1000 * 1/8 * 0.001 * 0.3)
-    const uint32_t link_bw = _port->bw_in_kilobytes_per_second();
+    // use at most 30% of bandwidth on parameters
+    const uint32_t link_bw = _port->bw_in_bytes_per_second();
 
-    uint32_t bytes_allowed = link_bw * (tnow - _queued_parameter_send_time_ms) * 26;
+    uint32_t bytes_allowed = link_bw * (tnow - _queued_parameter_send_time_ms) / 3333;
     const uint16_t size_for_one_param_value_msg = MAVLINK_MSG_ID_PARAM_VALUE_LEN + packet_overhead();
     if (bytes_allowed < size_for_one_param_value_msg) {
         bytes_allowed = size_for_one_param_value_msg;
     }
-    if (bytes_allowed > comm_get_txspace(chan)) {
-        bytes_allowed = comm_get_txspace(chan);
+    if (bytes_allowed > txspace()) {
+        bytes_allowed = txspace();
     }
     uint32_t count = bytes_allowed / size_for_one_param_value_msg;
 
@@ -64,11 +75,7 @@ GCS_MAVLINK::queued_param_send()
     }
     count -= async_replies_sent_count;
 
-    if (_queued_parameter == nullptr) {
-        return;
-    }
-
-    while (count && _queued_parameter != nullptr) {
+    while (count && _queued_parameter != nullptr && get_last_txbuf() > 50) {
         char param_name[AP_MAX_NAME_SIZE];
         _queued_parameter->copy_name_token(_queued_parameter_token, param_name, sizeof(param_name), true);
 
@@ -268,11 +275,19 @@ void GCS_MAVLINK::handle_param_set(const mavlink_message_t &msg)
     // find existing param so we can get the old value
     uint16_t parameter_flags = 0;
     vp = AP_Param::find(key, &var_type, &parameter_flags);
-    if (vp == nullptr) {
+    if (vp == nullptr || isnan(packet.param_value) || isinf(packet.param_value)) {
         return;
     }
 
     float old_value = vp->cast_to_float(var_type);
+
+    if (parameter_flags & AP_PARAM_FLAG_INTERNAL_USE_ONLY) {
+        // the user can set BRD_OPTIONS to enable set of internal
+        // parameters, for developer testing or unusual use cases
+        if (AP_BoardConfig::allow_set_internal_parameters()) {
+            parameter_flags &= ~AP_PARAM_FLAG_INTERNAL_USE_ONLY;
+        }
+    }
 
     if ((parameter_flags & AP_PARAM_FLAG_INTERNAL_USE_ONLY) || vp->is_read_only()) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Param write denied (%s)", key);
@@ -296,10 +311,16 @@ void GCS_MAVLINK::handle_param_set(const mavlink_message_t &msg)
     // save the change
     vp->save(force_save);
 
+    if (force_save && (parameter_flags & AP_PARAM_FLAG_ENABLE)) {
+        AP_Param::invalidate_count();
+    }
+
+#if HAL_LOGGING_ENABLED
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger != nullptr) {
         logger->Write_Parameter(key, vp->cast_to_float(var_type));
     }
+#endif
 }
 
 void GCS_MAVLINK::send_parameter_value(const char *param_name, ap_var_type param_type, float param_value)
@@ -332,11 +353,13 @@ void GCS::send_parameter_value(const char *param_name, ap_var_type param_type, f
     gcs().send_to_active_channels(MAVLINK_MSG_ID_PARAM_VALUE,
                                   (const char *)&packet);
 
+#if HAL_LOGGING_ENABLED
     // also log to AP_Logger
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger != nullptr) {
         logger->Write_Parameter(param_name, param_value);
     }
+#endif
 }
 
 
@@ -365,7 +388,7 @@ void GCS_MAVLINK::param_io_timer(void)
     AP_Param *vp;
 
     if (req.param_index != -1) {
-        AP_Param::ParamToken token;
+        AP_Param::ParamToken token {};
         vp = AP_Param::find_by_index(req.param_index, &reply.p_type, &token);
         if (vp == nullptr) {
             return;
@@ -447,3 +470,5 @@ void GCS_MAVLINK::handle_common_param_message(const mavlink_message_t &msg)
         break;
     }
 }
+
+#endif  // HAL_GCS_ENABLED

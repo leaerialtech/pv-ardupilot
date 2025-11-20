@@ -10,13 +10,30 @@ ADSB_TYPE 1
 SERIAL5_BAUD 57
 SERIAL5_PROTOCOL 1
 
+
 # enforce OpenDroneID on DroneCAN. Note that we need to lock down key parameters
-# to ensure the integrity of the RemoteID system
+# to ensure the integrity of the RemoteID system:
+# If setting persistent UAS ID at first reception of Basic ID from OEM's config tool
+# set the DID_OPTIONS to 4/5 (depending on allowing non-gps position) , otherwise set to 1. At first reception of Basic ID, the
+# UAS ID, Type, and UA Type will be set to the value in the Basic ID message and DID_OPTIONS
+# will be set to 1.
+
+#Heads-up: setting the “Lock on first Basic ID” bit (anything containing 4, e.g., 4 or 5) will write the received ID(s) into persistent.parm; clearing or changing that later isn’t trivial and is intentionally tamper-resistant. 
+#If you’re deciding between them: use 4 to just fuse the ID; use 5 if you also want the aircraft to refuse arming until RID prerequisites are satisfied. 
+#sUAS News
+
+#PrecisionVision: 
 DID_ENABLE 1 @READONLY
-DID_OPTIONS 1 @READONLY
-DID_MAVPORT -1 @READONLY
-DID_CANDRIVER 2 @READONLY
-AHRS_EKF_TYPE 2 @READONLY
+
+#for tamper-proof production builds, set DID_OPTIONS this to 5, but if not locking set to 1
+DID_OPTIONS 5 @READONLY 
+DID_MAVPORT -1  @READONLY
+DID_CANDRIVER 1 @READONLY
+AHRS_EKF_TYPE 3 @READONLY
+
+
 GPS_TYPE 1
 GPS_TYPE2 0
 
+EK2_PRIMARY 1
+EK3_PRIMARY 1

@@ -22,7 +22,6 @@
 #include "Scheduler.h"
 #include "hwdef/common/flash.h"
 #include <AP_Filesystem/AP_Filesystem.h>
-#include "sdcard.h"
 #include <stdio.h>
 
 using namespace ChibiOS;
@@ -37,9 +36,13 @@ extern const AP_HAL::HAL& hal;
 #define HAL_STORAGE_FILE "/APM/" SKETCHNAME ".stg"
 #endif
 
-#ifndef HAL_STORAGE_BACKUP_FILE
+#ifndef HAL_STORAGE_BACKUP_FOLDER
 // location of backup file
-#define HAL_STORAGE_BACKUP_FILE "/APM/" SKETCHNAME ".bak"
+#define HAL_STORAGE_BACKUP_FOLDER "/APM/STRG_BAK"
+#endif
+
+#ifndef HAL_STORAGE_BACKUP_COUNT
+#define HAL_STORAGE_BACKUP_COUNT 100
 #endif
 
 #define STORAGE_FLASH_RETRIES 5
@@ -84,7 +87,7 @@ void Storage::_storage_open(void)
         }
 
         // use microSD based storage
-        if (sdcard_retry()) {
+        if (AP::FS().retry_mount()) {
             log_fd = AP::FS().open(HAL_STORAGE_FILE, O_RDWR|O_CREAT);
             if (log_fd == -1) {
                 ::printf("open failed of " HAL_STORAGE_FILE "\n");
@@ -99,7 +102,7 @@ void Storage::_storage_open(void)
             }
             // pre-fill to full size
             if (AP::FS().lseek(log_fd, ret, SEEK_SET) != ret ||
-                AP::FS().write(log_fd, &_buffer[ret], CH_STORAGE_SIZE-ret) != CH_STORAGE_SIZE-ret) {
+                (CH_STORAGE_SIZE-ret > 0 && AP::FS().write(log_fd, &_buffer[ret], CH_STORAGE_SIZE-ret) != CH_STORAGE_SIZE-ret)) {
                 ::printf("setup failed for " HAL_STORAGE_FILE "\n");
                 AP::FS().close(log_fd);
                 log_fd = -1;
@@ -126,12 +129,75 @@ void Storage::_save_backup(void)
 {
 #ifdef USE_POSIX
     // allow for fallback to microSD based storage
-    if (sdcard_retry()) {
-        int fd = AP::FS().open(HAL_STORAGE_BACKUP_FILE, O_WRONLY|O_CREAT|O_TRUNC);
-        if (fd != -1) {
-            AP::FS().write(fd, _buffer, CH_STORAGE_SIZE);
-            AP::FS().close(fd);
+    // create the backup directory if need be
+    int ret;
+    const char* _storage_bak_directory = HAL_STORAGE_BACKUP_FOLDER;
+
+    if (hal.util->was_watchdog_armed()) {
+        // we are under watchdog reset
+        // ain't got no time...
+        return;
+    }
+
+    EXPECT_DELAY_MS(3000);
+
+    // We want to do this desperately,
+    // So we keep trying this for a second
+    uint32_t start_millis = AP_HAL::millis();
+    while(!AP::FS().retry_mount() && (AP_HAL::millis() - start_millis) < 1000) {
+        hal.scheduler->delay(1);        
+    }
+
+    ret = AP::FS().mkdir(_storage_bak_directory);
+    if (ret == -1 && errno != EEXIST) {
+        return;
+    }
+
+    char* fname = nullptr;
+    unsigned curr_bak = 0;
+    ret = asprintf(&fname, "%s/last_storage_bak", _storage_bak_directory);
+    if (fname == nullptr && (ret <= 0)) {
+        return;
+    }
+    int fd = AP::FS().open(fname, O_RDONLY);
+    if (fd != -1) {
+        char buf[10];
+        memset(buf, 0, sizeof(buf));
+        if (AP::FS().read(fd, buf, sizeof(buf)-1) > 0) {
+            //only record last HAL_STORAGE_BACKUP_COUNT backups
+            curr_bak = (strtol(buf, NULL, 10) + 1)%HAL_STORAGE_BACKUP_COUNT;
         }
+        AP::FS().close(fd);
+    }
+
+    fd = AP::FS().open(fname, O_WRONLY|O_CREAT|O_TRUNC);
+    free(fname);
+    fname = nullptr;
+    if (fd != -1) {
+        char buf[10];
+        snprintf(buf, sizeof(buf), "%u\r\n", (unsigned)curr_bak);
+        const ssize_t to_write = strlen(buf);
+        const ssize_t written = AP::FS().write(fd, buf, to_write);
+        AP::FS().close(fd);
+        if (written < to_write) {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    // create and write fram data to file
+    ret = asprintf(&fname, "%s/STRG%d.bak", _storage_bak_directory, curr_bak);
+    if (fname == nullptr || (ret <= 0)) {
+        return;
+    }
+    fd = AP::FS().open(fname, O_WRONLY|O_CREAT|O_TRUNC);
+    free(fname);
+    fname = nullptr;
+    if (fd != -1) {
+        //finally dump the fram data
+        AP::FS().write(fd, _buffer, CH_STORAGE_SIZE);
+        AP::FS().close(fd);
     }
 #endif
 }
@@ -280,6 +346,7 @@ void Storage::_flash_load(void)
 bool Storage::_flash_write(uint16_t line)
 {
 #ifdef STORAGE_FLASH_PAGE
+    EXPECT_DELAY_MS(1);
     return _flash.write(line*CH_STORAGE_LINE_SIZE, CH_STORAGE_LINE_SIZE);
 #else
     return false;
@@ -294,6 +361,7 @@ bool Storage::_flash_write_data(uint8_t sector, uint32_t offset, const uint8_t *
 #ifdef STORAGE_FLASH_PAGE
     size_t base_address = hal.flash->getpageaddr(_flash_page+sector);
     for (uint8_t i=0; i<STORAGE_FLASH_RETRIES; i++) {
+        EXPECT_DELAY_MS(1);
         if (hal.flash->write(base_address+offset, data, length)) {
             return true;
         }
@@ -346,13 +414,10 @@ bool Storage::_flash_erase_sector(uint8_t sector)
           thread.  We can't use EXPECT_DELAY_MS() as it checks we are
           in the main thread
          */
-        ChibiOS::Scheduler *sched = (ChibiOS::Scheduler *)hal.scheduler;
-        sched->_expect_delay_ms(1000);
+        EXPECT_DELAY_MS(1000);
         if (hal.flash->erasepage(_flash_page+sector)) {
-            sched->_expect_delay_ms(0);
             return true;
         }
-        sched->_expect_delay_ms(0);
         hal.scheduler->delay(1);
     }
     return false;
@@ -376,6 +441,12 @@ bool Storage::_flash_erase_ok(void)
  */
 bool Storage::healthy(void)
 {
+#ifdef USE_POSIX
+    // SD card storage is really slow
+    if (_initialisedType == StorageBackend::SDCard) {
+        return log_fd != -1 || AP_HAL::millis() - _last_empty_ms < 30000U;
+    }
+#endif
     return ((_initialisedType != StorageBackend::None) &&
             (AP_HAL::millis() - _last_empty_ms < 2000u));
 }
@@ -401,5 +472,19 @@ bool Storage::erase(void)
     return false;
 #endif
 }
+
+/*
+  get storage size and ptr
+ */
+bool Storage::get_storage_ptr(void *&ptr, size_t &size)
+{
+    if (_initialisedType==StorageBackend::None) {
+        return false;
+    }
+    ptr = _buffer;
+    size = sizeof(_buffer);
+    return true;
+}
+
 
 #endif // HAL_USE_EMPTY_STORAGE

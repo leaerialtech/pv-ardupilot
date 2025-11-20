@@ -719,7 +719,10 @@ class SLCAN(AbstractDriver):
 
         # Removing all unused stuff, because it breaks inter process communications.
         kwargs = copy.copy(kwargs)
-        keep_keys = inspect.getargspec(_io_process).args
+        if hasattr(inspect, 'getargspec'):
+            keep_keys = inspect.getargspec(_io_process).args
+        else:
+            keep_keys = inspect.getfullargspec(_io_process).args
         for key in list(kwargs.keys()):
             if key not in keep_keys:
                 del kwargs[key]
@@ -858,9 +861,8 @@ class SLCAN(AbstractDriver):
                 if time.monotonic() >= deadline:
                     return
 
-    def send(self, message_id, message, extended=False, canfd=False):
+    def send_frame(self, frame):
         self._check_alive()
-        frame = CANFrame(message_id, message, extended, canfd=canfd)
         try:
             self._tx_queue.put_nowait(frame)
         except queue.Full:

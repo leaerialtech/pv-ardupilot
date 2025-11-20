@@ -16,10 +16,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/////////////////////////////////////////////////////////////////
-//Modified by Leading Edge Aerial Technologies, LLC. (Feb 2021)//
-/////////////////////////////////////////////////////////////////
+#include "GCS_config.h"
+#include <AP_Mission/AP_Mission_config.h>
 
+#if HAL_GCS_ENABLED && AP_MISSION_ENABLED
 
 #include "MissionItemProtocol_Waypoints.h"
 
@@ -31,7 +31,7 @@
 MAV_MISSION_RESULT MissionItemProtocol_Waypoints::append_item(const mavlink_mission_item_int_t &mission_item_int)
 {
     // sanity check for DO_JUMP command
-    AP_Mission::Mission_Command cmd;
+    AP_Mission::Mission_Command cmd {};
 
     const MAV_MISSION_RESULT res = AP_Mission::mavlink_int_to_mission_cmd(mission_item_int, cmd);
     if (res != MAV_MISSION_ACCEPTED) {
@@ -58,7 +58,9 @@ bool MissionItemProtocol_Waypoints::clear_all_items()
 MAV_MISSION_RESULT MissionItemProtocol_Waypoints::complete(const GCS_MAVLINK &_link)
 {
     _link.send_text(MAV_SEVERITY_INFO, "Flight plan received");
+#if HAL_LOGGING_ENABLED
     AP::logger().Write_EntireMission();
+#endif
     return MAV_MISSION_ACCEPTED;
 }
 
@@ -70,11 +72,14 @@ MAV_MISSION_RESULT MissionItemProtocol_Waypoints::get_item(const GCS_MAVLINK &_l
     if (packet.seq != 0 && // always allow HOME to be read
         packet.seq >= mission.num_commands()) {
         // try to educate the GCS on the actual size of the mission:
-        mavlink_msg_mission_count_send(_link.get_chan(),
-                                       msg.sysid,
-                                       msg.compid,
-                                       mission.num_commands(),
-                                       MAV_MISSION_TYPE_MISSION);
+        const mavlink_channel_t chan = _link.get_chan();
+        if (HAVE_PAYLOAD_SPACE(chan, MISSION_COUNT)) {
+            mavlink_msg_mission_count_send(chan,
+                                           msg.sysid,
+                                           msg.compid,
+                                           mission.num_commands(),
+                                           MAV_MISSION_TYPE_MISSION);
+        }
         return MAV_MISSION_ERROR;
     }
 
@@ -85,28 +90,19 @@ MAV_MISSION_RESULT MissionItemProtocol_Waypoints::get_item(const GCS_MAVLINK &_l
         return MAV_MISSION_ERROR;
     }
 
-
-    if (!mission.mission_cmd_to_mavlink_int(cmd, ret_packet)) {
+    if (!AP_Mission::mission_cmd_to_mavlink_int(cmd, ret_packet)) {
         return MAV_MISSION_ERROR;
     }
 
     // set packet's current field to 1 if this is the command being executed
-
-    //THIS LOOKS LIKE A BUG:, cmd id vs index? 
-    //precisionvision change: I have it computing the current in the above (now member function instead of static) 
-  //  if (cmd.id == (uint16_t)mission.get_current_nav_cmd().index) {
-  //      ret_packet.current = 1;
-   // } else {
-   //     ret_packet.current = 0;
-   // }
-
-    
-
+    if (cmd.id == (uint16_t)mission.get_current_nav_cmd().index) {
+        ret_packet.current = 1;
+    } else {
+        ret_packet.current = 0;
+    }
 
     // set auto continue to 1
     ret_packet.autocontinue = 1;     // 1 (true), 0 (false)
-
-    ret_packet.command = cmd.id;
 
     return MAV_MISSION_ACCEPTED;
 }
@@ -121,7 +117,7 @@ uint16_t MissionItemProtocol_Waypoints::max_items() const {
 
 MAV_MISSION_RESULT MissionItemProtocol_Waypoints::replace_item(const mavlink_mission_item_int_t &mission_item_int)
 {
-    AP_Mission::Mission_Command cmd;
+    AP_Mission::Mission_Command cmd {};
 
     const MAV_MISSION_RESULT res = AP_Mission::mavlink_int_to_mission_cmd(mission_item_int, cmd);
     if (res != MAV_MISSION_ACCEPTED) {
@@ -150,3 +146,5 @@ void MissionItemProtocol_Waypoints::truncate(const mavlink_mission_count_t &pack
     // new mission arriving, truncate mission to be the same length
     mission.truncate(packet.count);
 }
+
+#endif  // HAL_GCS_ENABLED && AP_MISSION_ENABLED

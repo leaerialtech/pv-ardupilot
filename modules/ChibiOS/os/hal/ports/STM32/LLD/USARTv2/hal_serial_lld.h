@@ -27,6 +27,8 @@
 
 #if HAL_USE_SERIAL || defined(__DOXYGEN__)
 
+#include "stm32_usart.h"
+
 /*===========================================================================*/
 /* Driver constants.                                                         */
 /*===========================================================================*/
@@ -148,14 +150,6 @@
  */
 #if !defined(STM32_SERIAL_USART3_PRIORITY) || defined(__DOXYGEN__)
 #define STM32_SERIAL_USART3_PRIORITY        12
-#endif
-
-/**
- * @brief   USART3..8 interrupt priority level setting.
- * @note    Only valid on those devices with a shared IRQ.
- */
-#if !defined(STM32_SERIAL_USART3_8_PRIORITY) || defined(__DOXYGEN__)
-#define STM32_SERIAL_USART3_8_PRIORITY      12
 #endif
 
 /**
@@ -375,62 +369,131 @@
 #error "SERIAL driver activated but no USART/UART peripheral assigned"
 #endif
 
-#if STM32_SERIAL_USE_USART1 &&                                              \
+#if !defined(STM32_USART1_SUPPRESS_ISR) &&                                  \
+    STM32_SERIAL_USE_USART1 &&                                              \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART1_PRIORITY)
 #error "Invalid IRQ priority assigned to USART1"
 #endif
 
-#if STM32_SERIAL_USE_USART2 &&                                              \
+#if !defined(STM32_USART2_SUPPRESS_ISR) &&                                  \
+    STM32_SERIAL_USE_USART2 &&                                              \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART2_PRIORITY)
 #error "Invalid IRQ priority assigned to USART2"
 #endif
 
-#if defined(STM32_USART3_8_HANDLER)
-
-#if (STM32_SERIAL_USE_USART3 || STM32_SERIAL_USE_UART4  ||                  \
-     STM32_SERIAL_USE_UART5  || STM32_SERIAL_USE_USART6 ||                  \
-     STM32_SERIAL_USE_UART7  || STM32_SERIAL_USE_UART8) &&                  \
-     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART3_8_PRIORITY)
-#error "Invalid IRQ priority assigned to USART3..8"
-#endif
-
-#else /* !defined(STM32_USART3_8_HANDLER) */
-
-#if STM32_SERIAL_USE_USART3 &&                                              \
+#if !defined(STM32_USART3_SUPPRESS_ISR) &&                                  \
+    STM32_SERIAL_USE_USART3 &&                                              \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART3_PRIORITY)
 #error "Invalid IRQ priority assigned to USART3"
 #endif
 
-#if STM32_SERIAL_USE_UART4 &&                                               \
+#if !defined(STM32_UART4_SUPPRESS_ISR) &&                                   \
+    STM32_SERIAL_USE_UART4 &&                                               \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_UART4_PRIORITY)
 #error "Invalid IRQ priority assigned to UART4"
 #endif
 
-#if STM32_SERIAL_USE_UART5 &&                                               \
+#if !defined(STM32_UART5_SUPPRESS_ISR) &&                                   \
+    STM32_SERIAL_USE_UART5 &&                                               \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_UART5_PRIORITY)
 #error "Invalid IRQ priority assigned to UART5"
 #endif
 
-#if STM32_SERIAL_USE_USART6 &&                                              \
+#if !defined(STM32_USART6_SUPPRESS_ISR) &&                                  \
+    STM32_SERIAL_USE_USART6 &&                                              \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_USART6_PRIORITY)
 #error "Invalid IRQ priority assigned to USART6"
 #endif
 
-#if STM32_SERIAL_USE_UART7 &&                                               \
+#if !defined(STM32_UART7_SUPPRESS_ISR) &&                                   \
+    STM32_SERIAL_USE_UART7 &&                                               \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_UART7_PRIORITY)
 #error "Invalid IRQ priority assigned to UART7"
 #endif
 
-#if STM32_SERIAL_USE_UART8 &&                                               \
+#if !defined(STM32_UART8_SUPPRESS_ISR) &&                                   \
+    STM32_SERIAL_USE_UART8 &&                                               \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_UART8_PRIORITY)
 #error "Invalid IRQ priority assigned to UART8"
 #endif
 
-#endif /* !defined(STM32_USART3_8_HANDLER) */
-
-#if STM32_SERIAL_USE_LPUART1 &&                                             \
+#if !defined(STM32_LPUART1_SUPPRESS_ISR) &&                                 \
+    STM32_SERIAL_USE_LPUART1 &&                                             \
     !OSAL_IRQ_IS_VALID_PRIORITY(STM32_SERIAL_LPUART1_PRIORITY)
 #error "Invalid IRQ priority assigned to LPUART1"
+#endif
+
+/* Checks on allocation of USARTx units.*/
+#if STM32_SERIAL_USE_USART1
+#if defined(STM32_USART1_IS_USED)
+#error "SD1 requires USART1 but it is already used"
+#else
+#define STM32_USART1_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_USART2
+#if defined(STM32_USART2_IS_USED)
+#error "SD2 requires USART2 but it is already used"
+#else
+#define STM32_USART2_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_USART3
+#if defined(STM32_USART3_IS_USED)
+#error "SD3 requires USART3 but it is already used"
+#else
+#define STM32_USART3_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_UART4
+#if defined(STM32_UART4_IS_USED)
+#error "SD4 requires UART4 but it is already used"
+#else
+#define STM32_UART4_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_UART5
+#if defined(STM32_UART5_IS_USED)
+#error "SD5 requires UART5 but it is already used"
+#else
+#define STM32_UART5_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_USART6
+#if defined(STM32_USART6_IS_USED)
+#error "SD6 requires USART6 but it is already used"
+#else
+#define STM32_USART6_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_UART7
+#if defined(STM32_UART7_IS_USED)
+#error "SD7 requires UART7 but it is already used"
+#else
+#define STM32_UART7_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_UART8
+#if defined(STM32_UART8_IS_USED)
+#error "SD8 requires UART8 but it is already used"
+#else
+#define STM32_UART8_IS_USED
+#endif
+#endif
+
+#if STM32_SERIAL_USE_LPUART1
+#if defined(STM32_LPUART1_IS_USED)
+#error "LPSD1 requires LPUART1 but it is already used"
+#else
+#define STM32_LPUART1_IS_USED
+#endif
 #endif
 
 /*===========================================================================*/
@@ -443,6 +506,7 @@ typedef void (*uartirq_t)(void* sd);
   if ((sd)->config->irq_cb != NULL)                                 \
     (sd)->config->irq_cb((sd)->config->ctx);                        \
 }
+
 /**
  * @brief   STM32 Serial Driver configuration structure.
  * @details An instance of this structure must be passed to @p sdStart()
@@ -451,7 +515,7 @@ typedef void (*uartirq_t)(void* sd);
  *          implementation defines its own version and the custom static
  *          initializers.
  */
-typedef struct {
+typedef struct hal_serial_config {
   /**
    * @brief Bit rate.
    */
@@ -469,14 +533,16 @@ typedef struct {
    * @brief Initialization value for the CR3 register.
    */
   uint32_t                  cr3;
+
   /**
-   * @brief Set callback from irq
-   */
+    * @brief Set callback from irq
+    */
   uartirq_t                 irq_cb;
   /**
-   * @pointer to ctx
-   */
+    * @pointer to ctx
+    */
   void*                     ctx;
+
 } SerialConfig;
 
 /**
@@ -497,19 +563,13 @@ typedef struct {
   uint32_t                  clock;                                          \
   /* Mask to be applied on received frames.*/                               \
   uint8_t                   rxmask;                                         \
-  /* Serial Config*/                                                        \
-  const SerialConfig        *config;                                        \
+  /* config from start call.*/                                              \
+  const SerialConfig        *config;
+
+
 /*===========================================================================*/
 /* Driver macros.                                                            */
 /*===========================================================================*/
-
-/*
- * Extra USARTs definitions here (missing from the ST header file).
- */
-#define USART_CR2_STOP1_BITS    (0 << 12)   /**< @brief CR2 1 stop bit value.*/
-#define USART_CR2_STOP0P5_BITS  (1 << 12)   /**< @brief CR2 0.5 stop bit value.*/
-#define USART_CR2_STOP2_BITS    (2 << 12)   /**< @brief CR2 2 stop bit value.*/
-#define USART_CR2_STOP1P5_BITS  (3 << 12)   /**< @brief CR2 1.5 stop bit value.*/
 
 /*===========================================================================*/
 /* External declarations.                                                    */
@@ -549,6 +609,7 @@ extern "C" {
   void sd_lld_init(void);
   void sd_lld_start(SerialDriver *sdp, const SerialConfig *config);
   void sd_lld_stop(SerialDriver *sdp);
+  void sd_lld_serve_interrupt(SerialDriver *sdp);
 #ifdef __cplusplus
 }
 #endif

@@ -61,10 +61,10 @@
 #define PAL_STM32_OTYPE_OPENDRAIN       (1U << 2U)
 
 #define PAL_STM32_OSPEED_MASK           (3U << 3U)
-#define PAL_STM32_OSPEED_LOW            (0U << 3U)
-#define PAL_STM32_OSPEED_MEDIUM         (1U << 3U)
-#define PAL_STM32_OSPEED_FAST           (2U << 3U)
-#define PAL_STM32_OSPEED_HIGH           (3U << 3U)
+#define PAL_STM32_OSPEED_LOWEST         (0U << 3U)
+#define PAL_STM32_OSPEED_MID1           (1U << 3U)
+#define PAL_STM32_OSPEED_MID2           (2U << 3U)
+#define PAL_STM32_OSPEED_HIGHEST        (3U << 3U)
 
 #define PAL_STM32_PUPDR_MASK            (3U << 5U)
 #define PAL_STM32_PUPDR_FLOATING        (0U << 5U)
@@ -524,7 +524,7 @@ typedef uint32_t iopadid_t;
  * @notapi
  */
 #define pal_lld_ispadeventenabled(port, pad)                                \
-  (bool)((EXTI->IMR & (1U << (uint32_t)pad)) != 0U)
+  (bool)((EXTI->IMR1 & (1U << (uint32_t)pad)) != 0U)
 
 #if !defined(__DOXYGEN__)
 #if (PAL_USE_WAIT == TRUE) || (PAL_USE_CALLBACKS == TRUE)

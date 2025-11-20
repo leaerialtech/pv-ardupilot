@@ -15,8 +15,8 @@
 */
 
 /**
- * @file	GPIOv1/hal_pal_lld.h
- * @brief	AVR Tiny GPIO low level driver header file.
+ * @file  GPIOv1/hal_pal_lld.h
+ * @brief AVR Tiny GPIO low level driver header file.
  *
  * @addtogroup PAL
  * @{
@@ -59,7 +59,7 @@
  * @brief   Forms a line identifier.
  * @details A port/pad pair are encoded into an @p ioline_t type. The encoding
  *          of this type is platform-dependent.
- * @note    In this driver the pad number and the port identifier are 
+ * @note    In this driver the pad number and the port identifier are
  *          encoded in a structure of type ioline_t.
  */
 #define PAL_LINE(port, pad) _pal_lld_setlineid(port, pad)
@@ -172,7 +172,7 @@ typedef uint8_t iopadid_t;
 typedef struct {
   ioportid_t  port; /* Line port identifier.  */
   iopadid_t   pad;  /* Line pad identifier.   */
-}ioline_t;
+} ioline_t;
 
 /**
  * @brief   Type of an event mode.
@@ -276,7 +276,7 @@ typedef uint8_t ioeventmode_t;
 
 /*===========================================================================*/
 /* Implementation, some of the following macros could be implemented as      */
-/* functions, if so please put them in hal_pal_lld.c.                        */
+/* Functions, if so please put them in hal_pal_lld.c.                        */
 /*===========================================================================*/
 
 /**
@@ -409,7 +409,9 @@ typedef uint8_t ioeventmode_t;
 
 #if !defined(__DOXYGEN__)
 extern const PALConfig pal_default_config;
+#if (PAL_USE_WAIT == TRUE) || (PAL_USE_CALLBACKS == TRUE)
 extern palevent_t _pal_events[16];
+#endif
 #endif
 
 extern ROMCONST PALConfig pal_default_config;

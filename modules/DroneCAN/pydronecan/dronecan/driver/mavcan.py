@@ -28,20 +28,22 @@ else:
 TX_QUEUE_SIZE = 1000
 
 logger = getLogger(__name__)
-
+kill_process = False
 class ControlMessage(object):
     def __init__(self, command, data):
         self.command = command
         self.data = data
 
-def io_process(url, bus, target_system, baudrate, tx_queue, rx_queue):
+def io_process(url, bus, target_system, baudrate, tx_queue, rx_queue, exit_queue):
     os.environ['MAVLINK20'] = '1'
 
     target_component = 0
     last_enable = time.time()
     conn = None
     filter_list = None
-
+    signing_key = None
+    last_loss_print_t = time.time()
+    exit_proc = False
     def connect():
         nonlocal conn, baudrate
         conn = mavutil.mavlink_connection(url, baud=baudrate, source_system=250,
@@ -49,9 +51,16 @@ def io_process(url, bus, target_system, baudrate, tx_queue, rx_queue):
                                           dialect='ardupilotmega')
         if conn is None:
             raise DriverError('unable to connect to %s' % url)
+        nonlocal signing_key
+        if signing_key is not None:
+            conn.setup_signing(signing_key, sign_outgoing=True)
 
     def reconnect():
-        while True:
+        nonlocal exit_proc
+        while True and not exit_proc:
+            if (not exit_queue.empty() and exit_queue.get() == "QUIT"):
+                exit_proc = True
+                return
             try:
                 time.sleep(1)
                 logger.info('reconnecting to %s' % url)
@@ -100,12 +109,22 @@ def io_process(url, bus, target_system, baudrate, tx_queue, rx_queue):
         elif m.command == "FilterList":
             nonlocal filter_list
             filter_list = m.data
+        elif m.command == "SigningKey":
+            nonlocal signing_key
+            signing_key = m.data
+            conn.setup_signing(signing_key, sign_outgoing=True)
 
     connect()
     enable_can_forward()
 
     while True:
+        if (not exit_queue.empty() and exit_queue.get() == "QUIT") or exit_proc:
+            conn.close()
+            return
         while not tx_queue.empty():
+            if (not exit_queue.empty() and exit_queue.get() == "QUIT") or exit_proc:
+                conn.close()
+                return
             frame = tx_queue.get()
             if isinstance(frame, ControlMessage):
                 handle_control_message(frame)
@@ -144,9 +163,13 @@ def io_process(url, bus, target_system, baudrate, tx_queue, rx_queue):
         except Exception as ex:
             reconnect()
             continue
+        now = time.time()
         if m is None:
-            if time.time() - last_enable > 1:
+            if now - last_enable > 1:
                 enable_can_forward()
+            if now - last_loss_print_t > 5:
+                last_loss_print_t = now
+                print("MAVLink packet loss %.2f%%" % conn.packet_loss())
             continue
         if target_system == 0:
             target_system = m.get_srcSystem()
@@ -173,15 +196,23 @@ class MAVCAN(AbstractDriver):
 
         self.rx_queue = multiprocessing.Queue(maxsize=RX_QUEUE_SIZE)
         self.tx_queue = multiprocessing.Queue(maxsize=TX_QUEUE_SIZE)
+        self.exit_queue = multiprocessing.Queue(maxsize=1)
 
         self.proc = multiprocessing.Process(target=io_process, name='mavcan_io_process',
                                             args=(url, self.bus, self.target_system, baudrate,
-                                            self.tx_queue, self.rx_queue))
+                                            self.tx_queue, self.rx_queue, self.exit_queue))
         self.proc.daemon = True
         self.proc.start()
 
+        # allow signing pass phrase in environment
+        pass_phrase = os.environ.get("DRONECAN_SIGNING_KEY",None)
+        if pass_phrase:
+            self.set_signing_passphrase(pass_phrase)
+
     def close(self):
-        pass
+        if self.proc is not None:
+            self.exit_queue.put_nowait("QUIT")
+            self.proc.join()
 
     def __del__(self):
         self.close()
@@ -201,8 +232,7 @@ class MAVCAN(AbstractDriver):
                 if time.time() >= tstart + timeout:
                     return
 
-    def send(self, message_id, message, extended=False, canfd=False):
-        frame = CANFrame(message_id, message, extended, canfd=canfd)
+    def send_frame(self, frame):
         self._tx_hook(frame)
         self.tx_queue.put_nowait(frame)
 
@@ -240,4 +270,16 @@ class MAVCAN(AbstractDriver):
         '''get the current filter list'''
         return self.filter_list
 
-    
+    def passphrase_to_key(self, passphrase):
+        '''convert a passphrase to a 32 byte key'''
+        import hashlib
+        h = hashlib.new('sha256')
+        if sys.version_info[0] >= 3:
+            passphrase = passphrase.encode('ascii')
+        h.update(passphrase)
+        return h.digest()
+
+    def set_signing_passphrase(self, passphrase):
+        '''set MAVLink2 signing passphrase'''
+        signing_key = self.passphrase_to_key(passphrase)
+        self.tx_queue.put_nowait(ControlMessage('SigningKey', signing_key))

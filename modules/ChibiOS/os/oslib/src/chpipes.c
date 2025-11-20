@@ -1,12 +1,12 @@
 /*
-    ChibiOS - Copyright (C) 2006..2018 Giovanni Di Sirio.
+    ChibiOS - Copyright (C) 2006,2007,2008,2009,2010,2011,2012,2013,2014,
+              2015,2016,2017,2018,2019,2020,2021 Giovanni Di Sirio.
 
     This file is part of ChibiOS.
 
     ChibiOS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
+    the Free Software Foundation version 3 of the License.
 
     ChibiOS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,7 +18,7 @@
 */
 
 /**
- * @file    chpipes.c
+ * @file    oslib/src/chpipes.c
  * @brief   Pipes code.
  * @details Byte pipes.
  *          <h2>Operation mode</h2>
@@ -129,7 +129,7 @@ static size_t pipe_write(pipe_t *pp, const uint8_t *bp, size_t n) {
     memcpy((void *)pp->buffer, (const void *)bp, s2);
     pp->wrptr = pp->buffer + s2;
   }
-  else { /* n == s1 */
+  else {
     memcpy((void *)pp->wrptr, (const void *)bp, n);
     pp->wrptr = pp->buffer;
   }
@@ -180,7 +180,7 @@ static size_t pipe_read(pipe_t *pp, uint8_t *bp, size_t n) {
     memcpy((void *)bp, (void *)pp->buffer, s2);
     pp->rdptr = pp->buffer + s2;
   }
-  else { /* n == s1 */
+  else {
     memcpy((void *)bp, (void *)pp->rdptr, n);
     pp->rdptr = pp->buffer;
   }
@@ -383,6 +383,6 @@ size_t chPipeReadTimeout(pipe_t *pp, uint8_t *bp,
   return max - n;
 }
 
-#endif /* CH_CFG_USE_MAILBOXES == TRUE */
+#endif /* CH_CFG_USE_PIPES == TRUE */
 
 /** @} */

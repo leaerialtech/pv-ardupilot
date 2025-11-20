@@ -13,9 +13,11 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <AP_HAL/AP_HAL.h>
 #include "AP_RangeFinder_LightWareSerial.h"
-#include <AP_SerialManager/AP_SerialManager.h>
+
+#if AP_RANGEFINDER_LIGHTWARE_SERIAL_ENABLED
+
+#include <AP_HAL/AP_HAL.h>
 #include <ctype.h>
 
 extern const AP_HAL::HAL& hal;
@@ -23,35 +25,8 @@ extern const AP_HAL::HAL& hal;
 #define LIGHTWARE_DIST_MAX_CM           10000
 #define LIGHTWARE_OUT_OF_RANGE_ADD_CM   100
 
-/* 
-   The constructor also initialises the rangefinder. Note that this
-   constructor is not called until detect() returns true, so we
-   already know that we should setup the rangefinder
-*/
-AP_RangeFinder_LightWareSerial::AP_RangeFinder_LightWareSerial(RangeFinder::RangeFinder_State &_state,
-                                                               AP_RangeFinder_Params &_params,
-                                                               uint8_t serial_instance) :
-    AP_RangeFinder_Backend(_state, _params)
-{
-    const AP_SerialManager &serial_manager = AP::serialmanager();
-    uart = serial_manager.find_serial(AP_SerialManager::SerialProtocol_Rangefinder, serial_instance);
-    if (uart != nullptr) {
-        uart->begin(serial_manager.find_baudrate(AP_SerialManager::SerialProtocol_Rangefinder, serial_instance));
-    }
-}
-
-/* 
-   detect if a Lightware rangefinder is connected. We'll detect by
-   trying to take a reading on Serial. If we get a result the sensor is
-   there.
-*/
-bool AP_RangeFinder_LightWareSerial::detect(uint8_t serial_instance)
-{
-    return AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_Rangefinder, serial_instance) != nullptr;
-}
-
 // read - return last value measured by sensor
-bool AP_RangeFinder_LightWareSerial::get_reading(uint16_t &reading_cm)
+bool AP_RangeFinder_LightWareSerial::get_reading(float &reading_m)
 {
     if (uart == nullptr) {
         return false;
@@ -61,26 +36,73 @@ bool AP_RangeFinder_LightWareSerial::get_reading(uint16_t &reading_cm)
     uint16_t valid_count = 0;   // number of valid readings
     uint16_t invalid_count = 0; // number of invalid readings
 
+    // max distance the sensor can reliably measure - read from parameters
+    const int16_t distance_cm_max = max_distance_cm();
+
     // read any available lines from the lidar
-    int16_t nbytes = uart->available();
-    while (nbytes-- > 0) {
-        char c = uart->read();
-        if (c == '\r') {
-            linebuf[linebuf_len] = 0;
-            const float dist = (float)atof(linebuf);
-            if (!is_negative(dist)) {
-                sum += dist;
-                valid_count++;
-            } else {
-                invalid_count++;
-            }
-            linebuf_len = 0;
-        } else if (isdigit(c) || c == '.' || c == '-') {
-            linebuf[linebuf_len++] = c;
-            if (linebuf_len == sizeof(linebuf)) {
-                // too long, discard the line
+    for (auto i=0; i<8192; i++) {
+        uint8_t c;
+        if (!uart->read(c)) {
+            break;
+        }
+        // use legacy protocol
+        if (protocol_state == ProtocolState::UNKNOWN || protocol_state == ProtocolState::LEGACY) {
+            if (c == '\r') {
+                linebuf[linebuf_len] = 0;
+                const float dist = strtof(linebuf, nullptr);
+                if (!is_negative(dist) && !is_lost_signal_distance(dist * 100, distance_cm_max)) {
+                    sum += dist;
+                    valid_count++;
+                    // if still determining protocol update legacy valid count
+                    if (protocol_state == ProtocolState::UNKNOWN) {
+                        legacy_valid_count++;
+                    }
+                } else {
+                    invalid_count++;
+                }
                 linebuf_len = 0;
+            } else if (isdigit(c) || c == '.' || c == '-') {
+                linebuf[linebuf_len++] = c;
+                if (linebuf_len == sizeof(linebuf)) {
+                    // too long, discard the line
+                    linebuf_len = 0;
+                }
             }
+        }
+
+        // use binary protocol
+        if (protocol_state == ProtocolState::UNKNOWN || protocol_state == ProtocolState::BINARY) {
+            bool msb_set = BIT_IS_SET(c, 7);
+            if (msb_set) {
+                // received the high byte
+                high_byte = c;
+                high_byte_received = true;
+            } else {
+                // received the low byte which should be second
+                if (high_byte_received) {
+                    const int16_t dist = (high_byte & 0x7f) << 7 | (c & 0x7f);
+                    if (dist >= 0 && !is_lost_signal_distance(dist, distance_cm_max)) {
+                        sum += dist * 0.01f;
+                        valid_count++;
+                        // if still determining protocol update binary valid count
+                        if (protocol_state == ProtocolState::UNKNOWN) {
+                            binary_valid_count++;
+                        }
+                    } else {
+                        invalid_count++;
+                    }
+                }
+                high_byte_received = false;
+            }
+        }
+    }
+
+    // protocol set after 10 successful reads
+    if (protocol_state == ProtocolState::UNKNOWN) {
+        if (binary_valid_count > 10) {
+            protocol_state = ProtocolState::BINARY;
+        } else if (legacy_valid_count > 10) {
+            protocol_state = ProtocolState::LEGACY;
         }
     }
 
@@ -99,13 +121,15 @@ bool AP_RangeFinder_LightWareSerial::get_reading(uint16_t &reading_cm)
 
     // return average of all valid readings
     if (valid_count > 0) {
-        reading_cm = 100 * sum / valid_count;
+        reading_m = sum / valid_count;
+        no_signal = false;
         return true;
     }
 
     // all readings were invalid so return out-of-range-high value
     if (invalid_count > 0) {
-        reading_cm = MIN(MAX(LIGHTWARE_DIST_MAX_CM, max_distance_cm() + LIGHTWARE_OUT_OF_RANGE_ADD_CM), UINT16_MAX);
+        reading_m = MIN(MAX(LIGHTWARE_DIST_MAX_CM, distance_cm_max + LIGHTWARE_OUT_OF_RANGE_ADD_CM), UINT16_MAX) * 0.01f;
+        no_signal = true;
         return true;
     }
 
@@ -113,16 +137,20 @@ bool AP_RangeFinder_LightWareSerial::get_reading(uint16_t &reading_cm)
     return false;
 }
 
-/* 
-   update the state of the sensor
-*/
-void AP_RangeFinder_LightWareSerial::update(void)
+// check to see if distance returned by the LiDAR is a known lost-signal distance flag
+bool AP_RangeFinder_LightWareSerial::is_lost_signal_distance(int16_t distance_cm, int16_t distance_cm_max)
 {
-    if (get_reading(state.distance_cm)) {
-        // update range_valid state based on distance measured
-        state.last_reading_ms = AP_HAL::millis();
-        update_status();
-    } else if (AP_HAL::millis() - state.last_reading_ms > 200) {
-        set_status(RangeFinder::RangeFinder_NoData);
+    if (distance_cm < distance_cm_max + LIGHTWARE_OUT_OF_RANGE_ADD_CM) {
+        // in-range
+        return false;
     }
+    const int16_t bad_distances[] { 13000, 16000, 23000, 25000 };
+    for (const auto bad_distance_cm : bad_distances) {
+        if (distance_cm == bad_distance_cm) {
+            return true;
+        }
+    }
+    return false;
 }
+
+#endif

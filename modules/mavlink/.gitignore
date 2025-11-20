@@ -1,6 +1,7 @@
 *~
 tags
 doc/html
+doc/messages
 doc/*.log
 .DS_Store
 build*
@@ -12,12 +13,12 @@ pymavlink/generator/C/
 pymavlink/generator/python/
 pymavlink/generator/python/
 apidocs/
-#pymavlink/generator/message_definitions
+pymavlink/generator/message_definitions
 *.swp
-!pymavlink/dialects/
-!pymavlink/MANIFEST
-!pymavlink/dist
-!pymavlink.egg-info/
+pymavlink/dialects/
+pymavlink/MANIFEST
+pymavlink/dist
+pymavlink.egg-info/
 .pydevproject
 .project
 .ropeproject
@@ -25,5 +26,5 @@ apidocs/
 include/
 .tags*
 *.pyc
-!include/mavlink/v1.0
+include/mavlink/v1.0
 .idea

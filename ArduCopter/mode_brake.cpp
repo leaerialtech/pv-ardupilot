@@ -1,25 +1,43 @@
 #include "Copter.h"
+//PrecisionVision//
+#include "ParametersOEM.h"
+
+///////////////////
 
 #if MODE_BRAKE_ENABLED == ENABLED
 
-/*
- * Init and run calls for brake flight mode
- */
-
 // brake_init - initialise brake controller
+
+//PrecisionVision change:  For 100X loiter mode responds better particularly in terrain mode and with tuned loiter_brake_* params
+//to avoid too much upstream change we delegate to loiter control (if parameter set) but
+//ignore pilot stick movements if in "brake" (as opposed to loiter). 
 bool ModeBrake::init(bool ignore_checks)
 {
-    // set target to current position
-    init_target();
 
-    // initialize vertical speed and acceleration
-    pos_control->set_max_speed_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z);
-    pos_control->set_max_accel_z(BRAKE_MODE_DECEL_RATE);
+	//code to actually delegate to loiter mode -- fails on simulator because of throttle it seems
+    _delegate_loiter_active = false;
+    if (copter.g2.pvoem.brk_use_loiter > 0) {
+        
+        if (copter.mode_loiter.init(ignore_checks)) {
+            _delegate_loiter_active = true;
+            return true;
+        }
+    }
 
-    // initialise position and desired velocity
+    // initialise pos controller speed and acceleration
+    pos_control->set_max_speed_accel_xy(inertial_nav.get_velocity_neu_cms().length(), BRAKE_MODE_DECEL_RATE);
+    pos_control->set_correction_speed_accel_xy(inertial_nav.get_velocity_neu_cms().length(), BRAKE_MODE_DECEL_RATE);
+
+    // initialise position controller
+    pos_control->init_xy_controller();
+
+    // set vertical speed and acceleration limits
+    pos_control->set_max_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
+    pos_control->set_correction_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
+
+    // initialise the vertical position controller
     if (!pos_control->is_active_z()) {
-        pos_control->set_alt_target_to_current_alt();
-        pos_control->set_desired_velocity_z(inertial_nav.get_velocity_z());
+        pos_control->init_z_controller();
     }
 
     _timeout_ms = 0;
@@ -31,10 +49,25 @@ bool ModeBrake::init(bool ignore_checks)
 // should be called at 100hz or more
 void ModeBrake::run()
 {
+
+   ///////////////////
+   //PrecisionVision: run loiter control instead of brake's controller if option specified:
+   if (_delegate_loiter_active) 
+   {
+   	    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+
+    	copter.mode_loiter.isBrakeMode = true;
+    	copter.mode_loiter.run();
+    	return; // don't run Brake's own XY/Z paths
+    }
+    //////////
+
+
+
     // if not armed set throttle to zero and exit immediately
     if (is_disarmed_or_landed()) {
-        make_safe_spool_down();
-        init_target();
+        make_safe_ground_handling();
+        pos_control->relax_z_controller(0.0f);
         return;
     }
 
@@ -43,25 +76,22 @@ void ModeBrake::run()
 
     // relax stop target if we might be landed
     if (copter.ap.land_complete_maybe) {
-        loiter_nav->soften_for_landing();
+        pos_control->soften_for_landing_xy();
     }
 
     // use position controller to stop
-    pos_control->set_desired_velocity_xy(0.0f, 0.0f);
+    Vector2f vel;
+    Vector2f accel;
+    pos_control->input_vel_accel_xy(vel, accel);
     pos_control->update_xy_controller();
 
     // call attitude controller
-    attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav->get_roll(), wp_nav->get_pitch(), 0.0f);
+    attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
 
-    // update altitude target and call position controller
-    // protects heli's from inflight motor interlock disable
-    if (motors->get_desired_spool_state() == AP_Motors::DesiredSpoolState::GROUND_IDLE && !copter.ap.land_complete) {
-        pos_control->set_alt_target_from_climb_rate(-abs(g.land_speed), G_Dt, false);
-    } else {
-        pos_control->set_alt_target_from_climb_rate_ff(0.0f, G_Dt, false);
-    }
+    pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
     pos_control->update_z_controller();
 
+    // MAV_CMD_SOLO_BTN_PAUSE_CLICK (Solo only) is used to set the timeout.
     if (_timeout_ms != 0 && millis()-_timeout_start >= _timeout_ms) {
         if (!copter.set_mode(Mode::Number::LOITER, ModeReason::BRAKE_TIMEOUT)) {
             copter.set_mode(Mode::Number::ALT_HOLD, ModeReason::BRAKE_TIMEOUT);
@@ -69,28 +99,20 @@ void ModeBrake::run()
     }
 }
 
+/**
+ * Set a timeout for the brake mode
+ * 
+ * @param timeout_ms [in] timeout in milliseconds
+ * 
+ * @note MAV_CMD_SOLO_BTN_PAUSE_CLICK (Solo only) is used to set the timeout.
+ * If the timeout is reached, the mode will switch to loiter or alt hold depending on the current mode.
+ * If timeout_ms is 0, the timeout is disabled.
+ * 
+*/
 void ModeBrake::timeout_to_loiter_ms(uint32_t timeout_ms)
 {
     _timeout_start = millis();
     _timeout_ms = timeout_ms;
-}
-
-void ModeBrake::init_target()
-{
-    // initialise position controller
-    pos_control->set_desired_velocity_xy(0.0f,0.0f);
-    pos_control->set_desired_accel_xy(0.0f,0.0f);
-    pos_control->init_xy_controller();
-
-    // initialise pos controller speed and acceleration
-    pos_control->set_max_speed_xy(inertial_nav.get_velocity().length());
-    pos_control->set_max_accel_xy(BRAKE_MODE_DECEL_RATE);
-    pos_control->calc_leash_length_xy();
-
-    // set target position
-    Vector3f stopping_point;
-    pos_control->get_stopping_point_xy(stopping_point);
-    pos_control->set_xy_target(stopping_point.x, stopping_point.y);
 }
 
 #endif

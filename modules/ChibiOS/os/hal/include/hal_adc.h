@@ -104,6 +104,7 @@ typedef struct hal_adc_configuration_group ADCConversionGroup;
  * @brief   Type of an ADC notification callback.
  *
  * @param[in] adcp      pointer to the @p ADCDriver object triggering the
+ *                      callback
  */
 typedef void (*adccallback_t)(ADCDriver *adcp);
 
@@ -206,7 +207,7 @@ struct hal_adc_driver {
  */
 /**
  * @brief   Buffer state.
- * @note    This function is meant to be called from the SPI callback only.
+ * @note    This function is meant to be called from the ADC callback only.
  *
  * @param[in] adcp      pointer to the @p ADCDriver object
  * @return              The buffer state.
@@ -360,9 +361,10 @@ struct hal_adc_driver {
   if ((adcp)->grpp->error_cb != NULL) {                                     \
     (adcp)->state = ADC_ERROR;                                              \
     (adcp)->grpp->error_cb(adcp, err);                                      \
-    if ((adcp)->state == ADC_ERROR)                                         \
+    if ((adcp)->state == ADC_ERROR) {                                       \
       (adcp)->state = ADC_READY;                                            \
       (adcp)->grpp = NULL;                                                  \
+    }                                                                       \
   }                                                                         \
   else {                                                                    \
     (adcp)->state = ADC_READY;                                              \
@@ -381,7 +383,7 @@ extern "C" {
 #endif
   void adcInit(void);
   void adcObjectInit(ADCDriver *adcp);
-  void adcStart(ADCDriver *adcp, const ADCConfig *config);
+  msg_t adcStart(ADCDriver *adcp, const ADCConfig *config);
   void adcStop(ADCDriver *adcp);
   void adcStartConversion(ADCDriver *adcp,
                           const ADCConversionGroup *grpp,

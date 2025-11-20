@@ -168,6 +168,14 @@ void wspi_lld_init(void) {
 
 #if STM32_WSPI_USE_OCTOSPI1
   wspiObjectInit(&WSPID1);
+  WSPID1.extra_tcr  = 0U
+#if STM32_WSPI_OCTOSPI1_SSHIFT
+                    | OCTOSPI_TCR_SSHIFT
+#endif
+#if STM32_WSPI_OCTOSPI1_DHQC
+                    | OCTOSPI_TCR_DHQC
+#endif
+                    ;
   WSPID1.ospi       = OCTOSPI1;
   WSPID1.dma        = NULL;
   WSPID1.dmamode    = STM32_DMA_CR_CHSEL(OCTOSPI1_DMA_STREAM) |
@@ -182,6 +190,14 @@ void wspi_lld_init(void) {
 
 #if STM32_WSPI_USE_OCTOSPI2
   wspiObjectInit(&WSPID2);
+  WSPID2.extra_tcr  = 0U
+#if STM32_WSPI_OCTOSPI2_SSHIFT
+                    | OCTOSPI_TCR_SSHIFT
+#endif
+#if STM32_WSPI_OCTOSPI1_DHQC
+                    | OCTOSPI_TCR_DHQC
+#endif
+                    ;
   WSPID2.ospi       = OCTOSPI2;
   WSPID2.dma        = NULL;
   WSPID2.dmamode    = STM32_DMA_CR_CHSEL(OCTOSPI2_DMA_STREAM) |
@@ -203,6 +219,7 @@ void wspi_lld_init(void) {
  * @notapi
  */
 void wspi_lld_start(WSPIDriver *wspip) {
+  uint32_t dcr2;
 
   /* If in stopped state then full initialization.*/
   if (wspip->state == WSPI_STOP) {
@@ -215,7 +232,8 @@ void wspi_lld_start(WSPIDriver *wspip) {
       osalDbgAssert(wspip->dma != NULL, "unable to allocate stream");
       rccEnableOCTOSPI1(true);
       dmaSetRequestSource(wspip->dma, STM32_DMAMUX1_OCTOSPI1);
-    }
+      dcr2 = STM32_DCR2_PRESCALER(STM32_WSPI_OCTOSPI1_PRESCALER_VALUE - 1U);
+   }
 #endif
 
 #if STM32_WSPI_USE_OCTOSPI2
@@ -227,6 +245,7 @@ void wspi_lld_start(WSPIDriver *wspip) {
       osalDbgAssert(wspip->dma != NULL, "unable to allocate stream");
       rccEnableOCTOSPI2(true);
       dmaSetRequestSource(wspip->dma, STM32_DMAMUX1_OCTOSPI2);
+      dcr2 = STM32_DCR2_PRESCALER(STM32_WSPI_OCTOSPI2_PRESCALER_VALUE - 1U);
     }
 #endif
 
@@ -236,10 +255,9 @@ void wspi_lld_start(WSPIDriver *wspip) {
 
   /* WSPI setup and enable.*/
   wspip->ospi->DCR1 = wspip->config->dcr1;
-  wspip->ospi->DCR2 = wspip->config->dcr2 |
-                      STM32_DCR2_PRESCALER(STM32_WSPI_OCTOSPI1_PRESCALER_VALUE - 1U);
+  wspip->ospi->DCR2 = wspip->config->dcr2 | dcr2;
   wspip->ospi->DCR3 = wspip->config->dcr3;
-  wspip->ospi->CR   = OCTOSPI_CR_TCIE | OCTOSPI_CR_DMAEN | OCTOSPI_CR_EN;
+  wspip->ospi->CR   = OCTOSPI_CR_TCIE  | OCTOSPI_CR_DMAEN | OCTOSPI_CR_EN;
   wspip->ospi->FCR  = OCTOSPI_FCR_CTEF | OCTOSPI_FCR_CTCF |
                       OCTOSPI_FCR_CSMF | OCTOSPI_FCR_CTOF;
 }
@@ -272,6 +290,12 @@ void wspi_lld_stop(WSPIDriver *wspip) {
       rccDisableOCTOSPI1();
     }
 #endif
+
+#if STM32_WSPI_USE_OCTOSPI2
+    if (&WSPID2 == wspip) {
+      rccDisableOCTOSPI2();
+    }
+#endif
   }
 }
 
@@ -300,16 +324,13 @@ void wspi_lld_command(WSPIDriver *wspip, const wspi_command_t *cmdp) {
 #endif
   wspip->ospi->CR &= ~OCTOSPI_CR_FMODE;
   wspip->ospi->DLR = 0U;
-  wspip->ospi->TCR = cmdp->dummy;
+  wspip->ospi->TCR = cmdp->dummy | wspip->extra_tcr;
   wspip->ospi->CCR = cmdp->cfg;
   wspip->ospi->ABR = cmdp->alt;
   wspip->ospi->IR  = cmdp->cmd;
   if ((cmdp->cfg & WSPI_CFG_ADDR_MODE_MASK) != WSPI_CFG_ADDR_MODE_NONE) {
     wspip->ospi->AR  = cmdp->addr;
   }
-
-  /* Waiting for the previous operation to complete.*/
-  wspi_lld_sync(wspip);
 }
 
 /**
@@ -341,7 +362,7 @@ void wspi_lld_send(WSPIDriver *wspip, const wspi_command_t *cmdp,
 
   wspip->ospi->CR &= ~OCTOSPI_CR_FMODE;
   wspip->ospi->DLR = n - 1U;
-  wspip->ospi->TCR = cmdp->dummy;
+  wspip->ospi->TCR = cmdp->dummy | wspip->extra_tcr;
   wspip->ospi->CCR = cmdp->cfg;
   wspip->ospi->ABR = cmdp->alt;
   wspip->ospi->IR  = cmdp->cmd;
@@ -381,7 +402,7 @@ void wspi_lld_receive(WSPIDriver *wspip, const wspi_command_t *cmdp,
 
   wspip->ospi->CR  = (wspip->ospi->CR & ~OCTOSPI_CR_FMODE) | OCTOSPI_CR_FMODE_0;
   wspip->ospi->DLR = n - 1U;
-  wspip->ospi->TCR = cmdp->dummy;
+  wspip->ospi->TCR = cmdp->dummy | wspip->extra_tcr;
   wspip->ospi->CCR = cmdp->cfg;
   wspip->ospi->ABR = cmdp->alt;
   wspip->ospi->IR  = cmdp->cmd;
@@ -411,7 +432,7 @@ void wspi_lld_map_flash(WSPIDriver *wspip,
 
   /* Starting memory mapped mode using the passed parameters.*/
   wspip->ospi->CR   = OCTOSPI_CR_FMODE_1 | OCTOSPI_CR_FMODE_0 | OCTOSPI_CR_EN;
-  wspip->ospi->TCR  = cmdp->dummy;
+  wspip->ospi->TCR  = cmdp->dummy | wspip->extra_tcr;
   wspip->ospi->CCR  = cmdp->cfg;
   wspip->ospi->IR   = cmdp->cmd;
   wspip->ospi->ABR  = 0U;

@@ -85,10 +85,6 @@
 #error "STM32_RNGCLK not defined in this HAL"
 #endif
 
-#if STM32_RNGCLK != 48000000
-#error "STM32_RNGCLK is not exactly 48000000"
-#endif
-
 /*===========================================================================*/
 /* Driver data structures and types.                                         */
 /*===========================================================================*/
@@ -101,8 +97,8 @@
  * @brief   Low level fields of the TRNG configuration structure.
  */
 #define trng_lld_config_fields                                              \
-  /* Dummy configuration, it is not needed.*/                               \
-  uint32_t                   dummy
+  /* CR register initialization value.*/                                    \
+  uint32_t                   cr
 
 /**
  * @brief   Low level fields of the TRNG driver structure.

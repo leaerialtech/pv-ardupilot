@@ -14,7 +14,12 @@
  */
 
 /* Notify display driver for 128 x 64 pixel displays */
+#include "AP_Notify_config.h"
+
+#if HAL_DISPLAY_ENABLED
+
 #include "Display.h"
+
 #include "Display_SH1106_I2C.h"
 #include "Display_SSD1306_I2C.h"
 #include "Display_SITL.h"
@@ -402,7 +407,9 @@ void Display::update_all()
     update_text(0);
     update_mode(1);
     update_battery(2);
+#if AP_GPS_ENABLED
     update_gps(3);
+#endif
     //update_gps_sats(4);
     update_prearm(4);
     update_ekf(5);
@@ -470,6 +477,7 @@ void Display::update_prearm(uint8_t r)
     }
 }
 
+#if AP_GPS_ENABLED
 void Display::update_gps(uint8_t r)
 {
     static const char * gpsfixname[] = {"Other", "NoGPS","NoFix","2D","3D","DGPS", "RTK f", "RTK F"};
@@ -511,6 +519,7 @@ void Display::update_gps_sats(uint8_t r)
     draw_char(COLUMN(8), ROW(r), (AP_Notify::flags.gps_num_sats / 10) + '0');
     draw_char(COLUMN(9), ROW(r), (AP_Notify::flags.gps_num_sats % 10) + '0');
 }
+#endif
 
 void Display::update_ekf(uint8_t r)
 {
@@ -524,7 +533,13 @@ void Display::update_ekf(uint8_t r)
 void Display::update_battery(uint8_t r)
 {
     char msg [DISPLAY_MESSAGE_SIZE];
-    snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT1: %4.2fV", (double)AP::battery().voltage()) ;
+    AP_BattMonitor &battery = AP::battery();
+    uint8_t pct;
+    if (battery.capacity_remaining_pct(pct)) {
+        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV %2d%% ", (double)battery.voltage(), pct) ;
+    } else {
+        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV --%% ", (double)battery.voltage()) ;
+    }
     draw_text(COLUMN(0), ROW(r), msg);
  }
 
@@ -580,3 +595,5 @@ void Display::update_text(uint8_t r)
 
     draw_text(COLUMN(0), ROW(0), msg);
  }
+
+#endif  // HAL_DISPLAY_ENABLED

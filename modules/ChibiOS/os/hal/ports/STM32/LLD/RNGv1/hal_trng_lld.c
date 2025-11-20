@@ -45,7 +45,7 @@ TRNGDriver TRNGD1;
 /* Driver local variables and types.                                         */
 /*===========================================================================*/
 
-static const TRNGConfig default_cfg = {0};
+static const TRNGConfig default_cfg = {.cr = 0};
 
 /*===========================================================================*/
 /* Driver local functions.                                                   */
@@ -81,6 +81,12 @@ void trng_lld_init(void) {
  * @notapi
  */
 void trng_lld_start(TRNGDriver *trngp) {
+
+#if !defined(STM32_DISABLE_RNG_CLOCK_CHECK)
+  osalDbgAssert(((STM32_RNGCLK >= 47000000) && (STM32_RNGCLK <= 49000000)) ||
+                ((STM32_RNGCLK >= 3500000)  && (STM32_RNGCLK <= 4500000)),
+                "invalid RNG frequency");
+#endif
 
   /* There is no real configuration but setting up a valid pointer anyway.*/
   if (trngp->config == NULL) {

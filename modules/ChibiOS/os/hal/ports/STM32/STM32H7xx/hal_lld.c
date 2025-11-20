@@ -28,6 +28,10 @@
 /* Driver local definitions.                                                 */
 /*===========================================================================*/
 
+#define RCC_AHB1RSTR_DONOTTOUCH_Pos             (31U)
+#define RCC_AHB1RSTR_DONOTTOUCH_Msk             (0x1UL << RCC_AHB1RSTR_DONOTTOUCH_Pos)
+#define RCC_AHB1RSTR_DONOTTOUCH                 RCC_AHB1RSTR_DONOTTOUCH_Msk
+
 /*===========================================================================*/
 /* Driver exported variables.                                                */
 /*===========================================================================*/
@@ -97,13 +101,32 @@ static inline void init_pwr(void) {
   (void)pwr;
 #endif
 
-  PWR->CR1   = STM32_PWR_CR1 | 0xF0000000;
+  /* Lower C3 byte, it must be programmed at very first, then waiting for
+     power supply to stabilize.*/
+  PWR->CR3   = STM32_PWR_CR3 & 0x000000FFU;
+  while ((PWR->CSR1 & PWR_CSR1_ACTVOSRDY) == 0)
+    ; /* CHTODO timeout handling.*/
+
+  PWR->CR1   = STM32_PWR_CR1 | 0xF0000000U;
   PWR->CR2   = STM32_PWR_CR2;
-  PWR->CR3   = STM32_PWR_CR3;
+  PWR->CR3   = STM32_PWR_CR3;   /* Other bits, lower byte is not changed.   */
   PWR->CPUCR = STM32_PWR_CPUCR;
+#if defined(HAL_LLD_TYPE3_H)
+  PWR->SRDCR = STM32_VOS;
+#else
   PWR->D3CR  = STM32_VOS;
+#endif
+#if defined(HAL_LLD_TYPE1_H)
+#if !defined(STM32_ENFORCE_H7_REV_XY)
+  SYSCFG->PWRCR = STM32_ODEN;
+#endif
+#endif
+#if defined(HAL_LLD_TYPE3_H)
+  while ((PWR->SRDCR & PWR_SRDCR_VOSRDY) == 0)
+#else
   while ((PWR->D3CR & PWR_D3CR_VOSRDY) == 0)
-    ;
+#endif
+    ; /* CHTODO timeout handling.*/
 #if STM32_PWR_CR2 & PWR_CR2_BREN
 //  while ((PWR->CR2 & PWR_CR2_BRRDY) == 0)
 //    ;
@@ -126,19 +149,38 @@ static inline void init_pwr(void) {
  */
 void hal_lld_init(void) {
 
+#if STM32_NO_INIT == FALSE
   /* Reset of all peripherals. AHB3 is not reset entirely because FMC could
      have been initialized in the board initialization file (board.c).
      Note, GPIOs are not reset because initialized before this point in
-     board files.*/
-  rccResetAHB1(~0);
-  rccResetAHB2(~0);
-  rccResetAHB3(~(RCC_AHB3RSTR_CPURST | RCC_AHB3RSTR_FMCRST));
-  rccResetAHB4(~(STM32_GPIO_EN_MASK));
-  rccResetAPB1L(~0);
-  rccResetAPB1H(~0);
-  rccResetAPB2(~0);
-  rccResetAPB3(~0);
-  rccResetAPB4(~0);
+     board files.
+     Note that there is an undocumented bit in AHB1, presumably the cache
+     reset, which must not be touched because the cache is write-back and
+     latest writes could be lost.*/
+  __rccResetAHB1(~RCC_AHB1RSTR_DONOTTOUCH);
+  __rccResetAHB2(~0);
+  __rccResetAHB3(~(RCC_AHB3RSTR_FMCRST    |
+#if defined(STM32_QSPI_NO_RESET)
+                   RCC_AHB3RSTR_QSPIRST   |
+#endif
+#if defined(STM32_OSPI1_NO_RESET)
+                   RCC_AHB3RSTR_OSPI1RST  |
+                   RCC_AHB3RSTR_IOMNGRRST |
+                   RCC_AHB3RSTR_MDMARST   |
+#endif
+#if defined(STM32_OSPI2_NO_RESET)
+                   RCC_AHB3RSTR_OSPI2RST  |
+                   RCC_AHB3RSTR_IOMNGRRST |
+                   RCC_AHB3RSTR_MDMARST   |
+#endif
+                   0x80000000U));   /* Was RCC_AHB3RSTR_CPURST in Rev-V.*/
+  __rccResetAHB4(~(RCC_APB4RSTR_SYSCFGRST | STM32_GPIO_EN_MASK));
+  __rccResetAPB1L(~0);
+  __rccResetAPB1H(~0);
+  __rccResetAPB2(~0);
+  __rccResetAPB3(~0);
+  __rccResetAPB4(~0);
+#endif /* STM32_NO_INIT == FALSE */
 
   /* DMA subsystems initialization.*/
 #if defined(STM32_BDMA_REQUIRED)
@@ -147,41 +189,30 @@ void hal_lld_init(void) {
 #if defined(STM32_DMA_REQUIRED)
   dmaInit();
 #endif
+#if defined(STM32_MDMA_REQUIRED)
+  mdmaInit();
+#endif
 
   /* IRQ subsystem initialization.*/
   irqInit();
 
-  /* MPU initialization.*/
-#if (STM32_NOCACHE_SRAM1_SRAM2 == TRUE) || (STM32_NOCACHE_SRAM3 == TRUE)
+  /* MPU initialization if required.*/
+#if STM32_NOCACHE_ENABLE == TRUE
   {
-    uint32_t base, size;
-
-#if (STM32_NOCACHE_SRAM1_SRAM2 == TRUE) && (STM32_NOCACHE_SRAM3 == TRUE)
-    base = 0x30000000U;
-    size = MPU_RASR_SIZE_512K;
-#elif (STM32_NOCACHE_SRAM1_SRAM2 == TRUE) && (STM32_NOCACHE_SRAM3 == FALSE)
-    base = 0x30000000U;
-    size = MPU_RASR_SIZE_256K;
-#elif (STM32_NOCACHE_SRAM1_SRAM2 == FALSE) && (STM32_NOCACHE_SRAM3 == TRUE)
-    base = 0x30040000U;
-    size = MPU_RASR_SIZE_16K;
-#else
-#error "invalid constants used in mcuconf.h"
-#endif
-
-    /* The SRAM2 bank can optionally made a non cache-able area for use by
-       DMA engines.*/
-    mpuConfigureRegion(MPU_REGION_7,
-                       base,
+    mpuConfigureRegion(STM32_NOCACHE_MPU_REGION,
+                       STM32_NOCACHE_RBAR,
                        MPU_RASR_ATTR_AP_RW_RW |
                        MPU_RASR_ATTR_NON_CACHEABLE |
-                       size |
+                       MPU_RASR_ATTR_S |
+                       STM32_NOCACHE_RASR |
                        MPU_RASR_ENABLE);
     mpuEnable(MPU_CTRL_PRIVDEFENA);
 
+#if STM32_TARGET_CORE == 1
     /* Invalidating data cache to make sure that the MPU settings are taken
        immediately.*/
     SCB_CleanInvalidateDCache();
+#endif
   }
 #endif
 }
@@ -194,6 +225,7 @@ void hal_lld_init(void) {
  * @special
  */
 void stm32_clock_init(void) {
+#if STM32_NO_INIT == FALSE
   uint32_t cfgr;
 
 #if 0
@@ -201,13 +233,16 @@ void stm32_clock_init(void) {
   (void)rcc;
 #endif
 
-#if STM32_NO_INIT == FALSE
-#if !defined(STM32_DISABLE_ERRATA_2_2_15)
+#if defined(STM32_ENFORCE_H7_REV_XY)
   /* Fix for errata 2.2.15: Reading from AXI SRAM might lead to data
      read corruption.
      AXI->TARG7_FN_MOD.*/
   *((volatile uint32_t *)(0x51000000 + 0x1108 + 0x7000)) = 0x00000001U;
 #endif
+
+  /* SYSCFG clock enabled here because it is a multi-functional unit shared
+     among multiple drivers.*/
+  rccEnableAPB4(RCC_APB4ENR_SYSCFGEN, true);
 
   /* PWR initialization.*/
   init_pwr();
@@ -230,7 +265,10 @@ void stm32_clock_init(void) {
 
   /* Registers cleared to reset values.*/
   RCC->CR      = RCC_CR_HSION;             /* CR Reset value.              */
-  RCC->ICSCR   = 0x40000000U;              /* ICSCR Reset value.           */
+  RCC->HSICFGR = 0x40000000U;              /* HSICFGR Reset value.         */
+#if !defined(STM32_ENFORCE_H7_REV_XY)
+  RCC->CSICFGR = 0x20000000U;              /* CSICFGR Reset value.         */
+#endif
   RCC->CSR     = 0x00000000U;              /* CSR reset value.             */
   RCC->PLLCFGR = 0x01FF0000U;              /* PLLCFGR reset value.         */
 
@@ -239,7 +277,10 @@ void stm32_clock_init(void) {
   cfgr = STM32_MCO2SEL | RCC_CFGR_MCO2PRE_VALUE(STM32_MCO2PRE_VALUE) |
          STM32_MCO1SEL | RCC_CFGR_MCO1PRE_VALUE(STM32_MCO1PRE_VALUE) |
          RCC_CFGR_RTCPRE_VALUE(STM32_RTCPRE_VALUE) |
-         STM32_HRTIMSEL | STM32_STOPKERWUCK | STM32_STOPWUCK;
+         STM32_STOPKERWUCK | STM32_STOPWUCK;
+#if !defined(HAL_LLD_TYPE3_H)
+  cfgr |= STM32_HRTIMSEL;
+#endif
 #if STM32_TIMPRE_ENABLE == TRUE
   cfgr |= RCC_CFGR_TIMPRE;
 #endif
@@ -254,14 +295,22 @@ void stm32_clock_init(void) {
 #endif
   while ((RCC->CR & RCC_CR_HSERDY) == 0)
     ;                           /* Waits until HSE is stable.               */
-#endif
+#endif /* STM32_HSE_ENABLED == TRUE */
+
+  /* HSI48 activation.*/
+#if STM32_HSI48_ENABLED == TRUE
+  RCC->CR |= RCC_CR_HSI48ON;
+  while ((RCC->CR & RCC_CR_HSI48RDY) == 0)
+    ;                           /* Waits until HSI48 is stable.             */
+
+#endif /* STM32_HSI48_ENABLED == TRUE */
 
   /* CSI activation.*/
 #if STM32_CSI_ENABLED == TRUE
   RCC->CR |= RCC_CR_CSION;
   while ((RCC->CR & RCC_CR_CSIRDY) == 0)
     ;                           /* Waits until CSI is stable.               */
-#endif /* STM32_HSE_ENABLED == TRUE */
+#endif /* STM32_CSI_ENABLED == TRUE */
 
   /* LSI activation.*/
 #if STM32_LSI_ENABLED == TRUE
@@ -349,31 +398,68 @@ void stm32_clock_init(void) {
 #endif /* STM32_PLL1_ENABLED || STM32_PLL2_ENABLED || STM32_PLL3_ENABLED */
 
   /* AHB and APB dividers.*/
+#if defined(HAL_LLD_TYPE3_H)
+  RCC->CDCFGR1 = STM32_CDCPRE  | STM32_CDPPRE | STM32_CDHPRE;
+  RCC->CDCFGR2 = STM32_CDPPRE2 | STM32_CDPPRE1;
+  RCC->SRDCFGR = STM32_SRDPPRE;
+#else
   RCC->D1CFGR = STM32_D1CPRE  | STM32_D1PPRE3 | STM32_D1HPRE;
   RCC->D2CFGR = STM32_D2PPRE2 | STM32_D2PPRE1;
   RCC->D3CFGR = STM32_D3PPRE4;
+#endif
 
   /* Peripherals clocks.*/
-  RCC->D1CCIPR  = STM32_CKPERSEL  | STM32_SDMMCSEL    | STM32_QSPISEL    |
+#if defined(HAL_LLD_TYPE1_H)
+  RCC->D1CCIPR  = STM32_CKPERSEL   | STM32_SDMMCSEL    | STM32_QSPISEL       |
                   STM32_FMCSEL;
-  RCC->D2CCIP1R = STM32_SWPSEL    | STM32_FDCANSEL    | STM32_DFSDM1SEL  |
-                  STM32_SPDIFSEL  | STM32_SPDIFSEL    | STM32_SPI45SEL   |
-                  STM32_SPI123SEL | STM32_SAI23SEL    | STM32_SAI1SEL;
-  RCC->D2CCIP2R = STM32_LPTIM1SEL | STM32_CECSEL      | STM32_USBSEL     |
-                  STM32_I2C123SEL | STM32_RNGSEL      | STM32_USART16SEL |
+  RCC->D2CCIP1R = STM32_SWPSEL     | STM32_FDCANSEL    | STM32_DFSDM1SEL     |
+                  STM32_SPDIFSEL   | STM32_SPDIFSEL    | STM32_SPI45SEL      |
+                  STM32_SPI123SEL  | STM32_SAI23SEL    | STM32_SAI1SEL;
+  RCC->D2CCIP2R = STM32_LPTIM1SEL  | STM32_CECSEL      | STM32_USBSEL        |
+                  STM32_I2C123SEL  | STM32_RNGSEL      | STM32_USART16SEL    |
                   STM32_USART234578SEL;
-  RCC->D3CCIPR  = STM32_SPI6SEL   | STM32_SAI4BSEL    | STM32_SAI4ASEL   |
-                  STM32_ADCSEL    | STM32_LPTIM345SEL | STM32_LPTIM2SEL  |
-                  STM32_I2C4SEL   | STM32_LPUART1SEL;
+  RCC->D3CCIPR  = STM32_SPI6SEL    | STM32_SAI4BSEL    | STM32_SAI4ASEL      |
+                  STM32_ADCSEL     | STM32_LPTIM345SEL | STM32_LPTIM2SEL     |
+                  STM32_I2C4SEL    | STM32_LPUART1SEL;
+#elif defined(HAL_LLD_TYPE2_H)
+  RCC->D1CCIPR  = STM32_CKPERSEL   | STM32_SDMMCSEL    | STM32_OCTOSPISEL    |
+                  STM32_FMCSEL;
+  RCC->D2CCIP1R = STM32_SWPSEL     | STM32_FDCANSEL    | STM32_DFSDM1SEL     |
+                  STM32_SPDIFSEL   | STM32_SPDIFSEL    | STM32_SPI45SEL      |
+                  STM32_SPI123SEL  | STM32_SAI23SEL    | STM32_SAI1SEL;
+  RCC->D2CCIP2R = STM32_LPTIM1SEL  | STM32_CECSEL      | STM32_USBSEL        |
+                  STM32_I2C1235SEL | STM32_RNGSEL      | STM32_USART16910SEL |
+                  STM32_USART234578SEL;
+  RCC->D3CCIPR  = STM32_SPI6SEL    | STM32_SAI4BSEL    | STM32_SAI4ASEL      |
+                  STM32_ADCSEL     | STM32_LPTIM345SEL | STM32_LPTIM2SEL     |
+                  STM32_I2C4SEL    | STM32_LPUART1SEL;
+#elif defined(HAL_LLD_TYPE3_H)
+  RCC->CDCCIPR  = STM32_CKPERSEL   | STM32_SDMMCSEL    | STM32_OCTOSPISEL    |
+                  STM32_FMCSEL;
+  RCC->CDCCIP1R = STM32_SWPSEL     | STM32_FDCANSEL    | STM32_DFSDM1SEL     |
+                  STM32_SPDIFSEL   | STM32_SPDIFSEL    | STM32_SPI45SEL      |
+                  STM32_SPI123SEL  | STM32_SAI2BSEL    | STM32_SAI2ASEL      |
+                  STM32_SAI1SEL;
+  RCC->CDCCIP2R = STM32_LPTIM1SEL  | STM32_CECSEL      | STM32_USBSEL        |
+                  STM32_I2C123SEL  | STM32_RNGSEL      | STM32_USART16910SEL |
+                  STM32_USART234578SEL;
+  RCC->SRDCCIPR = STM32_SPI6SEL    | STM32_DFSDM2SEL   | STM32_ADCSEL        |
+                  STM32_LPTIM3SEL  | STM32_LPTIM2SEL   | STM32_I2C4SEL       |
+                  STM32_LPUART1SEL;
+#endif
 
   /* Flash setup.*/
-  FLASH->ACR = FLASH_ACR_WRHIGHFREQ_2 | STM32_FLASHBITS;
+  FLASH->ACR = FLASH_ACR_WRHIGHFREQ_1 | FLASH_ACR_WRHIGHFREQ_0 |
+               STM32_FLASHBITS;
+  while ((FLASH->ACR & FLASH_ACR_LATENCY) !=
+         (STM32_FLASHBITS & FLASH_ACR_LATENCY)) {
+  }
 
   /* Switching to the configured clock source if it is different
      from HSI.*/
 #if STM32_SW != STM32_SW_HSI_CK
   RCC->CFGR |= STM32_SW;        /* Switches on the selected clock source.   */
-  while ((RCC->CFGR & RCC_CFGR_SWS) != (STM32_SW << 3U))
+  while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != (STM32_SW << RCC_CFGR_SWS_Pos))
     ;
 #endif
 
@@ -386,16 +472,14 @@ void stm32_clock_init(void) {
                   STM32_UART4SEL  | STM32_USART3SEL | STM32_USART2SEL |
                   STM32_USART1SEL;
 #endif
-#endif /* STM32_NO_INIT */
 
   /* RAM1 2 and 3 clocks enabled.*/
   rccEnableSRAM1(true);
   rccEnableSRAM2(true);
+#if !(defined(HAL_LLD_TYPE2_H) || defined(HAL_LLD_TYPE3_H))
   rccEnableSRAM3(true);
-
-  /* SYSCFG clock enabled here because it is a multi-functional unit shared
-     among multiple drivers.*/
-  rccEnableAPB4(RCC_APB4ENR_SYSCFGEN, true);
+#endif
+#endif /* STM32_NO_INIT */
 }
 
 /** @} */

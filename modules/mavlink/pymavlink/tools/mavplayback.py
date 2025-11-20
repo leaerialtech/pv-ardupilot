@@ -122,7 +122,7 @@ class App(object):
 
     def rewind(self):
         '''rewind 10%'''
-        pos = int(self.mlog.f.tell() - 0.1*self.filesize)
+        pos = int(self.mlog.f.tell() - 0.1 * self.filesize)
         if pos < 0:
             pos = 0
         self.mlog.f.seek(pos)
@@ -130,7 +130,7 @@ class App(object):
 
     def forward(self):
         '''forward 10%'''
-        pos = int(self.mlog.f.tell() + 0.1*self.filesize)
+        pos = int(self.mlog.f.tell() + 0.1 * self.filesize)
         if pos > self.filesize:
             pos = self.filesize - 2048
         self.mlog.f.seek(pos)
@@ -238,7 +238,7 @@ class App(object):
             self.fdm.set('rpm',           msg.chan3_scaled*0.01)
 
         if msg.get_type() == 'STATUSTEXT':
-            print("APM: %s" % msg.text)
+            print("AP: %s" % msg.text)
 
         if msg.get_type() == 'SYS_STATUS':
             self.flightmode.configure(text=self.mlog.flightmode)

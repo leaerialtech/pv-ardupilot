@@ -13,16 +13,15 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "AP_Notify/AP_Notify.h"
 #include "NeoPixel.h"
+
+#if AP_NOTIFY_NEOPIXEL_ENABLED
+
+#include "AP_Notify/AP_Notify.h"
 #include "SRV_Channel/SRV_Channel.h"
 
 // This limit is from the dshot driver rcout groups limit
 #define AP_NOTIFY_NEOPIXEL_MAX_INSTANCES        4
-
-#ifndef HAL_NEOPIXEL_COUNT
-#define HAL_NEOPIXEL_COUNT 1
-#endif
 
 // Datasheet: https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf
 // 24bit msg as 3 byte GRB (not RGB) where first bit is G7, and last bit is B0
@@ -62,9 +61,15 @@ uint16_t NeoPixel::init_ports()
 
     for (uint16_t chan=0; chan<16; chan++) {
         if ((1U<<chan) & mask) {
-            led->set_num_neopixel(chan+1, (pNotify->get_led_len()));
+            if (pNotify->get_led_type() & AP_Notify::Notify_LED_NeoPixel) {
+                led->set_num_neopixel(chan+1, pNotify->get_led_len());
+            } else if (pNotify->get_led_type() & AP_Notify::Notify_LED_NeoPixelRGB) {
+                led->set_num_neopixel_rgb(chan+1, pNotify->get_led_len());
+            }
         }
     }
 
     return mask;
 }
+
+#endif  // AP_NOTIFY_NEOPIXEL_ENABLED

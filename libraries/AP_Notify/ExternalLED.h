@@ -15,14 +15,7 @@
 
 #pragma once
 
-#include <AP_Common/AP_Common.h>
-#include <AP_HAL/AP_HAL.h>
-#include <AP_Param/AP_Param.h>
-
 #include "NotifyDevice.h"
-
-#define HIGH 1
-#define LOW 0
 
 class ExternalLED: public NotifyDevice
 {

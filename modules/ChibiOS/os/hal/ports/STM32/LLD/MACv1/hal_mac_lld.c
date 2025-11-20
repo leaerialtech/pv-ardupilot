@@ -84,11 +84,11 @@ MACDriver ETHD1;
 static const uint8_t default_mac_address[] = {0xAA, 0x55, 0x13,
                                               0x37, 0x01, 0x10};
 
-static stm32_eth_rx_descriptor_t __eth_rd[STM32_MAC_RECEIVE_BUFFERS];
-static stm32_eth_tx_descriptor_t __eth_td[STM32_MAC_TRANSMIT_BUFFERS];
+static stm32_eth_rx_descriptor_t __eth_desc_rx[STM32_MAC_RECEIVE_BUFFERS];
+static stm32_eth_tx_descriptor_t __eth_desc_tx[STM32_MAC_TRANSMIT_BUFFERS];
 
-static uint32_t __eth_rb[STM32_MAC_RECEIVE_BUFFERS][BUFFER_SIZE];
-static uint32_t __eth_tb[STM32_MAC_TRANSMIT_BUFFERS][BUFFER_SIZE];
+static uint32_t __eth_buf_rx[STM32_MAC_RECEIVE_BUFFERS][BUFFER_SIZE];
+static uint32_t __eth_buf_tx[STM32_MAC_TRANSMIT_BUFFERS][BUFFER_SIZE];
 
 /*===========================================================================*/
 /* Driver local functions.                                                   */
@@ -191,6 +191,7 @@ static void mac_lld_set_address(const uint8_t *p) {
 /*===========================================================================*/
 
 OSAL_IRQ_HANDLER(STM32_ETH_HANDLER) {
+  MACDriver *macp = &ETHD1;
   uint32_t dmasr;
 
   OSAL_IRQ_PROLOGUE();
@@ -198,21 +199,18 @@ OSAL_IRQ_HANDLER(STM32_ETH_HANDLER) {
   dmasr = ETH->DMASR;
   ETH->DMASR = dmasr; /* Clear status bits.*/
 
-  if (dmasr & ETH_DMASR_RS) {
-    /* Data Received.*/
-    osalSysLockFromISR();
-    osalThreadDequeueAllI(&ETHD1.rdqueue, MSG_RESET);
-#if MAC_USE_EVENTS
-    osalEventBroadcastFlagsI(&ETHD1.rdevent, 0);
-#endif
-    osalSysUnlockFromISR();
-  }
+  if ((dmasr & (ETH_DMASR_RS | ETH_DMASR_TS)) != 0U) {
+    if ((dmasr & ETH_DMASR_TS) != 0U) {
+      /* Data Transmitted.*/
+      __mac_tx_wakeup(macp);
+    }
 
-  if (dmasr & ETH_DMASR_TS) {
-    /* Data Transmitted.*/
-    osalSysLockFromISR();
-    osalThreadDequeueAllI(&ETHD1.tdqueue, MSG_RESET);
-    osalSysUnlockFromISR();
+    if ((dmasr & ETH_DMASR_RS) != 0U) {
+      /* Data Received.*/
+      __mac_rx_wakeup(macp);
+    }
+
+    __mac_callback(macp);
   }
 
   OSAL_IRQ_EPILOGUE();
@@ -227,7 +225,7 @@ OSAL_IRQ_HANDLER(STM32_ETH_HANDLER) {
  *
  * @notapi
  */
-void mac_lld_init(void) {
+bool mac_lld_init(void) {
   unsigned i;
 
   macObjectInit(&ETHD1);
@@ -236,14 +234,14 @@ void mac_lld_init(void) {
   /* Descriptor tables are initialized in chained mode, note that the first
      word is not initialized here but in mac_lld_start().*/
   for (i = 0; i < STM32_MAC_RECEIVE_BUFFERS; i++) {
-    __eth_rd[i].rdes1 = STM32_RDES1_RCH | STM32_MAC_BUFFERS_SIZE;
-    __eth_rd[i].rdes2 = (uint32_t)__eth_rb[i];
-    __eth_rd[i].rdes3 = (uint32_t)&__eth_rd[(i + 1) % STM32_MAC_RECEIVE_BUFFERS];
+    __eth_desc_rx[i].rdes1 = STM32_RDES1_RCH | STM32_MAC_BUFFERS_SIZE;
+    __eth_desc_rx[i].rdes2 = (uint32_t)__eth_buf_rx[i];
+    __eth_desc_rx[i].rdes3 = (uint32_t)&__eth_desc_rx[(i + 1) % STM32_MAC_RECEIVE_BUFFERS];
   }
   for (i = 0; i < STM32_MAC_TRANSMIT_BUFFERS; i++) {
-    __eth_td[i].tdes1 = 0;
-    __eth_td[i].tdes2 = (uint32_t)__eth_tb[i];
-    __eth_td[i].tdes3 = (uint32_t)&__eth_td[(i + 1) % STM32_MAC_TRANSMIT_BUFFERS];
+    __eth_desc_tx[i].tdes1 = 0;
+    __eth_desc_tx[i].tdes2 = (uint32_t)__eth_buf_tx[i];
+    __eth_desc_tx[i].tdes3 = (uint32_t)&__eth_desc_tx[(i + 1) % STM32_MAC_TRANSMIT_BUFFERS];
   }
 
   /* Selection of the RMII or MII mode based on info exported by board.h.*/
@@ -273,7 +271,10 @@ void mac_lld_init(void) {
 #if defined(BOARD_PHY_ADDRESS)
   ETHD1.phyaddr = BOARD_PHY_ADDRESS << 11;
 #else
-  mii_find_phy(&ETHD1);
+  if (!mii_find_phy(&ETHD1)) {
+      rccDisableETH();
+      return false;
+  }
 #endif
 
 #if defined(BOARD_PHY_RESET)
@@ -296,6 +297,8 @@ void mac_lld_init(void) {
 
   /* MAC clocks stopped again.*/
   rccDisableETH();
+
+  return true;
 }
 
 /**
@@ -310,17 +313,17 @@ void mac_lld_start(MACDriver *macp) {
 
   /* Resets the state of all descriptors.*/
   for (i = 0; i < STM32_MAC_RECEIVE_BUFFERS; i++)
-    __eth_rd[i].rdes0 = STM32_RDES0_OWN;
-  macp->rxptr = (stm32_eth_rx_descriptor_t *)__eth_rd;
+    __eth_desc_rx[i].rdes0 = STM32_RDES0_OWN;
+  macp->rxptr = (stm32_eth_rx_descriptor_t *)__eth_desc_rx;
   for (i = 0; i < STM32_MAC_TRANSMIT_BUFFERS; i++)
-    __eth_td[i].tdes0 = STM32_TDES0_TCH;
-  macp->txptr = (stm32_eth_tx_descriptor_t *)__eth_td;
+    __eth_desc_tx[i].tdes0 = STM32_TDES0_TCH;
+  macp->txptr = (stm32_eth_tx_descriptor_t *)__eth_desc_tx;
 
   /* MAC clocks activation and commanded reset procedure.*/
   rccEnableETH(true);
 #if defined(STM32_MAC_DMABMR_SR)
   ETH->DMABMR |= ETH_DMABMR_SR;
-  while(ETH->DMABMR & ETH_DMABMR_SR)
+  while (ETH->DMABMR & ETH_DMABMR_SR)
     ;
 #endif
 
@@ -352,10 +355,15 @@ void mac_lld_start(MACDriver *macp) {
   ETH->MACCR =                  ETH_MACCR_RE | ETH_MACCR_TE;
 #endif
 
+  /* MMC configuration:
+     Disable all MMC interrupts.*/
+  ETH->MMCRIMR = ETH_MMCRIMR_RFCEM  | ETH_MMCRIMR_RFAEM   | ETH_MMCRIMR_RGUFM;
+  ETH->MMCTIMR = ETH_MMCTIMR_TGFSCM | ETH_MMCTIMR_TGFMSCM | ETH_MMCTIMR_TGFM;
+
   /* DMA configuration:
      Descriptor chains pointers.*/
-  ETH->DMARDLAR = (uint32_t)__eth_rd;
-  ETH->DMATDLAR = (uint32_t)__eth_td;
+  ETH->DMARDLAR = (uint32_t)__eth_desc_rx;
+  ETH->DMATDLAR = (uint32_t)__eth_desc_tx;
 
   /* Enabling required interrupt sources.*/
   ETH->DMASR    = ETH->DMASR;
@@ -427,15 +435,12 @@ msg_t mac_lld_get_transmit_descriptor(MACDriver *macp,
   if (!macp->link_up)
     return MSG_TIMEOUT;
 
-  osalSysLock();
-
   /* Get Current TX descriptor.*/
   tdes = macp->txptr;
 
   /* Ensure that descriptor isn't owned by the Ethernet DMA or locked by
      another thread.*/
   if (tdes->tdes0 & (STM32_TDES0_OWN | STM32_TDES0_LOCKED)) {
-    osalSysUnlock();
     return MSG_TIMEOUT;
   }
 
@@ -444,8 +449,6 @@ msg_t mac_lld_get_transmit_descriptor(MACDriver *macp,
 
   /* Next TX descriptor to use.*/
   macp->txptr = (stm32_eth_tx_descriptor_t *)tdes->tdes3;
-
-  osalSysUnlock();
 
   /* Set the buffer size and configuration.*/
   tdp->offset   = 0;
@@ -503,8 +506,6 @@ msg_t mac_lld_get_receive_descriptor(MACDriver *macp,
                                      MACReceiveDescriptor *rdp) {
   stm32_eth_rx_descriptor_t *rdes;
 
-  osalSysLock();
-
   /* Get Current RX descriptor.*/
   rdes = macp->rxptr;
 
@@ -523,7 +524,6 @@ msg_t mac_lld_get_receive_descriptor(MACDriver *macp,
       rdp->physdesc = rdes;
       macp->rxptr   = (stm32_eth_rx_descriptor_t *)rdes->rdes3;
 
-      osalSysUnlock();
       return MSG_OK;
     }
     /* Invalid frame found, purging.*/
@@ -534,7 +534,6 @@ msg_t mac_lld_get_receive_descriptor(MACDriver *macp,
   /* Next descriptor to check.*/
   macp->rxptr = rdes;
 
-  osalSysUnlock();
   return MSG_TIMEOUT;
 }
 
